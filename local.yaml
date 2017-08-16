@@ -5,4 +5,4 @@ HOST_NAME: ico-service
 VIRTUAL_HOST: ico.services.rehive.io
 ENV_FILE: .local.env
 VENV_PYTHON: ~/.conda/envs/ico-service/bin/python
-POSTGRES_PORT: 5125
+POSTGRES_PORT: 5126
