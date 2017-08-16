@@ -11,20 +11,6 @@ services:
     ports:
       - 8010:8000
 
-  worker:
-    extends:
-        service: webapp
-        file: ./docker-services.yml
-    command: /bin/sh -c "celery -A config.celery worker --loglevel=INFO --concurrency=4 -Q general-${CELERY_ID}"
-    links:
-      - postgres
-
-  scheduler:
-    extends:
-      service: webapp
-      file: ./docker-services.yml
-    command: /bin/sh -c "celery -A config.celery worker --beat --loglevel=INFO --pidfile= --concurrency=1 -Q dummy-queue-{CELERY_ID}"
-
   postgres:
     image: postgres:9.5
     volumes_from:

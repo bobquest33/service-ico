@@ -6,14 +6,9 @@ data:
   DEBUG: "False"
   NAMESPACE: "staging"
   PROJECT_NAME: "ico-service"
-  CELERY_ID: "ico-service-kube-staging"
   TASK_QUEUE: "False"
   GCLOUD_USE_STATIC: "True"
   GCLOUD_STATIC_BUCKET: "ico-service-static"
-  AWS_USE_S3: "False"
-  AWS_STORAGE_BUCKET_NAME: "rehive"
   DJANGO_BASE_DOMAIN: "ico.s.services.rehive.io"
   REHIVE_API_URL: "https://rehive.com/api/3/"
-  SERVER_EMAIL: info@rehive.com
-  DEFAULT_FROM_EMAIL: info@rehive.com
 kind: ConfigMap

@@ -37,12 +37,10 @@ def compose(ctx, cmd='--help', version='latest'):
 
     env_vars = ("IMAGE_NAME={image_name} "
                 "ENV_FILE={env_file} "
-                "CELERY_ID={celery_id}  "
                 "COMPOSE_PROJECT_NAME={compose_project_name} "
                 "POSTGRES_PORT={postgres_port} "
                 ).format(image_name=image_name,
                          env_file=env_file,
-                         celery_id=config_dict.get('CELERY_ID', ''),
                          compose_project_name=config_dict['PROJECT_NAME'],
                          postgres_port=config_dict.get('POSTGRES_PORT', 5432))
 

@@ -5,7 +5,6 @@ HOST_NAME: rehive-build-server # not required for k8s-only setup
 BASE_IMAGE: gcr.io/rehive-services/ico-service-base
 VIRTUAL_HOST: ico.s.services.rehive.io
 ENV_FILE: .staging.env
-CELERY_ID: ico-service-kube-staging
 GCLOUD_STATIC_BUCKET: ico-service-static
 CLUSTER: staging
 CLUSTER_PROJECT: rehive-services
