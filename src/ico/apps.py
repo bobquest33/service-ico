@@ -2,4 +2,4 @@ from django.apps import AppConfig
 
 
 class Starter(AppConfig):
-    name = 'notifications'
+    name = 'ico'

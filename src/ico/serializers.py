@@ -5,9 +5,9 @@ from rest_framework import serializers
 from rest_framework.serializers import ModelSerializer
 from django.db import transaction
 
-from notifications.models import *
-from notifications.enums import WebhookEvent
-from notifications.authentication import HeaderAuthentication
+from ico.models import *
+from ico.enums import WebhookEvent
+from ico.authentication import HeaderAuthentication
 from rehive import Rehive, APIException
 
 from logging import getLogger
@@ -132,11 +132,6 @@ class WebhookSerializer(serializers.Serializer):
         data = validated_data.get('data')
         event = validated_data['event']['value']
         company = validated_data.get('company')
-        notifications = Notification.objects.filter(event=WebhookEvent(event),
-            company=company, enabled=True)
-
-        for notification in notifications:
-            notification.trigger(data)
 
         return validated_data
 
@@ -161,61 +156,3 @@ class CompanySerializer(serializers.ModelSerializer):
 
         instance.save()
         return instance
-
-
-class NotificationSerializer(serializers.ModelSerializer):
-    """
-    Serialize notifications, create, update and delete.
-    """
-
-    id = serializers.IntegerField(read_only=True)
-    company = serializers.CharField(read_only=True)
-    event = serializers.ChoiceField(choices=WebhookEvent.choices(), 
-        required=False, source='event.value')
-
-    class Meta:
-        model = Notification
-        fields = ('id', 'name', 'subject', 'company', 'html_message', 'text_message', 
-            'sms_message', 'enabled', 'event', 'to_email', 'to_mobile', 
-            'expression',)
-        
-    def create(self, validated_data):
-        if validated_data.get('event'):
-            event = validated_data['event']['value']
-            validated_data['event'] = WebhookEvent(event)
-        validated_data['company'] = self.context['request'].user.company
-        return Notification.objects.create(**validated_data)
-
-    def update(self, instance, validated_data):
-        if validated_data.get('event'):
-            event = validated_data['event']['value']
-            validated_data['event'] = WebhookEvent(event)
-
-        for key, value in validated_data.items():
-            setattr(instance, key, value)
-
-        instance.save()
-        return instance
-
-    def delete(self):
-        instance = self.instance
-        instance.delete()
-
-
-class LogSerializer(serializers.ModelSerializer):
-    """
-    Serialize notification logs.
-    """
-
-    id = serializers.IntegerField(read_only=True)
-    notification = serializers.CharField(read_only=True)
-    created = serializers.SerializerMethodField(read_only=True)
-
-    class Meta:
-        model = NotificationLog
-        fields = ('id', 'notification', 'recipient', 'text_message', 
-            'html_message', 'sms_message', 'sent', 'error_message', 'created')
-
-    @staticmethod
-    def get_created(log):
-        return int(log.created.timestamp() * 1000)

@@ -12,7 +12,7 @@ admin.autodiscover()
 
 urlpatterns = (
     # Views
-    url(r'^api/', include('notifications.urls', namespace='notifications')),
+    url(r'^api/', include('ico.urls', namespace='ico')),
     url(r'^admin/', admin.site.urls),
 )
 

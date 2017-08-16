@@ -83,7 +83,7 @@ def deploy(ctx, config, version_tag):
     """
 
     config_dict = get_config(config)
-    # workers_dict = get_workers('etc/k8s/notification-service-staging/workers.json')
+    # workers_dict = get_workers('etc/k8s/ico-service-staging/workers.json')
 
     set_project(ctx, config)
     set_cluster(ctx, config)

@@ -1,20 +1,19 @@
 apiVersion: v1
 metadata:
-  name: notification-service
-  namespace: notification-service
+  name: ico-service
+  namespace: ico-service
 data:
   DEBUG: "False"
   NAMESPACE: "production"
-  PROJECT_NAME: "notification-service"
-  CELERY_ID: "notification-service-kube"
+  PROJECT_NAME: "ico-service"
+  CELERY_ID: "ico-service-kube"
   TASK_QUEUE: "False"
   GCLOUD_USE_STATIC: "True"
-  GCLOUD_STATIC_BUCKET: "notification-service-static"
+  GCLOUD_STATIC_BUCKET: "ico-service-static"
   AWS_USE_S3: "False"
   AWS_STORAGE_BUCKET_NAME: "rehive"
-  DJANGO_BASE_DOMAIN: "notification.services.rehive.io"
+  DJANGO_BASE_DOMAIN: "ico.services.rehive.io"
   REHIVE_API_URL: "https://rehive.com/api/3/"
-  TWILIO_FROM_NUMBER: "+16506662086"
   SERVER_EMAIL: info@rehive.com
   DEFAULT_FROM_EMAIL: info@rehive.com
 kind: ConfigMap

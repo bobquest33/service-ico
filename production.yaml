@@ -1,11 +1,11 @@
-PROJECT_NAME: notification-service
-NAMESPACE: notification-service
-IMAGE: gcr.io/rehive-services/notification-service
+PROJECT_NAME: ico-service
+NAMESPACE: ico-service
+IMAGE: gcr.io/rehive-services/ico-service
 HOST_NAME: rehive-build-server # not required for k8s-only setup
-BASE_IMAGE: gcr.io/rehive-services/notification-service-base
-VIRTUAL_HOST: notification.services.rehive.io
+BASE_IMAGE: gcr.io/rehive-services/ico-service-base
+VIRTUAL_HOST: ico.services.rehive.io
 ENV_FILE: .production.env
-CELERY_ID: notification-service-kube
-GCLOUD_STATIC_BUCKET: notification-service-static
+CELERY_ID: ico-service-kube
+GCLOUD_STATIC_BUCKET: ico-service-static
 CLUSTER: production
 CLUSTER_PROJECT: rehive-services

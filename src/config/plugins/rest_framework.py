@@ -10,7 +10,7 @@ CORS_ORIGIN_ALLOW_ALL = True
 # ---------------------------------------------------------------------------------------------------------------------
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
-        'notifications.permissions.IsAuthenticated',
+        'ico.permissions.IsAuthenticated',
     ),
     'EXCEPTION_HANDLER': 'config.exceptions.custom_exception_handler',
 }

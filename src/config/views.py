@@ -1,4 +1,4 @@
 from django.http import HttpResponse
 
 def index(request):
-    return HttpResponse("Welcome to the notifications server!")
+    return HttpResponse("Welcome to the ico server!")

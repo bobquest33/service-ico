@@ -16,12 +16,6 @@ import os
 from .plugins.secrets import *
 from .plugins.rest_framework import *
 from .plugins.database import *
-from .plugins.tasks import *
-from .plugins.s3utils import *
-from .plugins.email import *
-from .plugins.sentry import *
-from .plugins.twilio import *
-
 
 # LOGGING
 # ---------------------------------------------------------------------------------------------------------------------#
@@ -51,12 +45,9 @@ INSTALLED_APPS = [
     'corsheaders',
     'rest_framework',
     'rest_framework.authtoken',
-    'storages',
 
-    'notifications',
+    'ico',
 
-    'anymail',
-    'raven.contrib.django.raven_compat',  # sentry
     'debug_toolbar',
 ]
 
@@ -161,10 +152,6 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
-            ],
-
-            'builtins': [
-                'notifications.templatetags.filters',
             ],
         },
         'DIRS': [

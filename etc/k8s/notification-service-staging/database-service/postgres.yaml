@@ -1,10 +1,10 @@
 kind: PersistentVolume
 apiVersion: v1
 metadata:
-  name: notification-service-staging-database-volume
+  name: ico-service-staging-database-volume
   labels:
     release: "staging"
-  namespace: notification-service-staging
+  namespace: ico-service-staging
 spec:
   capacity:
     storage: 50Gi
@@ -13,13 +13,13 @@ spec:
   persistentVolumeReclaimPolicy: Recycle
   gcePersistentDisk:
     fsType: "ext4"
-    pdName: "notification-service-staging-database"
+    pdName: "ico-service-staging-database"
 ---
 kind: PersistentVolumeClaim
 apiVersion: v1
 metadata:
-  name: notification-service-data-claim
-  namespace: notification-service-staging
+  name: ico-service-data-claim
+  namespace: ico-service-staging
 spec:
   accessModes:
     - ReadWriteOnce
@@ -35,7 +35,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: database-postgres
-  namespace: notification-service-staging
+  namespace: ico-service-staging
   labels:
     name: database
     node: postgres
@@ -56,13 +56,13 @@ spec:
   volumes:
     - name: pg-data-volume
       persistentVolumeClaim:
-        claimName: notification-service-data-claim
+        claimName: ico-service-data-claim
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: database-postgres-service
-  namespace: notification-service-staging
+  namespace: ico-service-staging
   labels:
     name: database
     node: postgres

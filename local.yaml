@@ -1,9 +1,9 @@
-PROJECT_NAME: notification-service
-NAMESPACE: notification-service
-IMAGE: gcr.io/rehive-services/notification-service
-HOST_NAME: notification-service
-VIRTUAL_HOST: notification.services.rehive.io
+PROJECT_NAME: ico-service
+NAMESPACE: ico-service
+IMAGE: gcr.io/rehive-services/ico-service
+HOST_NAME: ico-service
+VIRTUAL_HOST: ico.services.rehive.io
 ENV_FILE: .local.env
-CELERY_ID: notification-service
-VENV_PYTHON: ~/.conda/envs/notification-service/bin/python
+CELERY_ID: ico-service
+VENV_PYTHON: ~/.conda/envs/ico-service/bin/python
 POSTGRES_PORT: 5125

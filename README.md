@@ -1,14 +1,14 @@
-Notification Service
+Ico Service
 ======================
+
 Documentation
 -------------
-https://github.com/rehive/service-notifications/wiki
 
 Local development
 -----------------
 1. Set up a python virtual environment. E.g. with Anaconda:
-`conda create -n notification-service python=3.5`  
-`source activate notification-service`  
+`conda create -n ico-service python=3.5`  
+`source activate ico-service`  
 `pip install -r requirements.txt`
 
 If psycopg2 installation fails to install, try `conda install psycopg2==2.6.2`
