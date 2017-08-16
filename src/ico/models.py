@@ -8,7 +8,6 @@ from django.template import Template
 from django.template import Context
 
 from ico.enums import WebhookEvent
-from ico.utils import common
 
 from logging import getLogger
 
