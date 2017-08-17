@@ -56,15 +56,6 @@ class Company(DateModel):
     def natural_key(self):
         return (self.identifier,)
 
-    def get_from_email(self):
-        if self.email and self.name:
-            return "{name} <{email}>".format(name=self.name, 
-                email=self.email)
-        elif self.email:
-            return self.email       
-        else:
-            return None
-
     def save(self, *args, **kwargs):
         if not self.id:
             self.secret = uuid.uuid4()
