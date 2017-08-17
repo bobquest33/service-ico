@@ -46,8 +46,15 @@ class ActivateSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {"token": ["Company already activated."]})
 
+        try:
+            currencies = rehive.currencies.get()
+        except APIException:
+            raise serializers.ValidationError({"non_field_errors": 
+                ["Unkown error."]})
+
         validated_data['user'] = user
         validated_data['company'] = company
+        validated_data['currencies'] = currencies
 
         return validated_data
 
@@ -55,6 +62,7 @@ class ActivateSerializer(serializers.Serializer):
         token = validated_data.get('token')
         rehive_user = validated_data.get('user')
         rehive_company = validated_data.get('company')
+        currencies = validated_data.get('currencies')
 
         try:
             with transaction.atomic():
@@ -68,6 +76,11 @@ class ActivateSerializer(serializers.Serializer):
 
                 user.company = company
                 user.save()
+
+                # Add currencies to company automatically.
+                for kwargs in currencies:
+                    kwargs['company'] = company
+                    currency = Currency.objects.create(**kwargs)
 
                 return company
 
@@ -109,7 +122,7 @@ class DeactivateSerializer(serializers.Serializer):
         self.validated_data['company'].admin.delete()
 
 
-class WebhookSerializer(serializers.Serializer):
+class AdminWebhookSerializer(serializers.Serializer):
     """
     Validate and serialize the webhook data. The secret key and company are
     used to identify a specific company.
@@ -140,7 +153,17 @@ class WebhookSerializer(serializers.Serializer):
         return validated_data
 
 
-class CompanySerializer(serializers.ModelSerializer):
+class AdminCurrencySerializer(serializers.ModelSerializer):
+    """
+    Serialize currency.
+    """
+
+    class Meta:
+        model = Currency
+        fields = ('code', 'description', 'symbol', 'unit', 'divisibility',)
+
+
+class AdminCompanySerializer(serializers.ModelSerializer):
     """
     Serialize company, update and delete.
     """
@@ -160,3 +183,62 @@ class CompanySerializer(serializers.ModelSerializer):
 
         instance.save()
         return instance
+
+
+class AdminCreateIcoSerializer(serializers.ModelSerializer):
+    """
+    Serialize ico, create
+    """
+
+    company = serializers.CharField()
+
+    class Meta:
+        model = Ico
+        fields = ('currency', 'exchange_provider', 'fiat_currency', 
+            'fiat_goal_amount', 'enabled')
+        
+    def validate_currency(self, currency):
+        company = self.context['request'].user.company
+
+        try:
+            return Currency.objects.get(code__iexact=currency, company=company, 
+                enabled=True)  
+        except Currency.DoesNotExist:
+            raise serializers.ValidationError("Invalid currency.")
+
+    def validate_fiat_currency(seld, currency):
+        company = self.context['request'].user.company
+
+        try:
+            return Currency.objects.get(code__iexact=currency, company=company, 
+                enabled=True)  
+        except Currency.DoesNotExist:
+            raise serializers.ValidationError("Invalid currency.")
+
+    def create(self, validated_data):
+        validated_data['company'] = self.context['request'].user.company
+        return Notification.objects.create(**validated_data)
+
+
+class AdminIcoSerializer(serializers.ModelSerializer):
+    """
+    Serialize ico, update and delete.
+    """
+    
+    class Meta:
+        model = Ico
+        fields = ('id', 'currency', 'exchange_provider', 'fiat_currency', 
+            'fiat_goal_amount', 'enabled')
+        read_only_field = ('id', 'currency', 'fiat_currency', 
+            'fiat_goal_amount',)
+
+    def update(self, instance, validated_data):
+        for key, value in validated_data.items():
+            setattr(instance, key, value)
+
+        instance.save()
+        return instance
+
+    def delete(self):
+        instance = self.instance
+        instance.delete()

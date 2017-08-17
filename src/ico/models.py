@@ -79,9 +79,10 @@ class Currency(DateModel):
     symbol = models.CharField(max_length=30, null=True, blank=True)
     unit = models.CharField(max_length=30, null=True, blank=True)
     divisibility = models.IntegerField(default=2)
+    enabled = models.BooleanField(default=True)
 
     def __str__(self):
-        return str(self.code) + "_" + str(self.company)
+        return str(self.code)
 
 
 class Ico(DateModel):
@@ -90,7 +91,6 @@ class Ico(DateModel):
     currency = models.ForeignKey('ico.Currency', related_name='ico')
     exchange_provider = models.CharField(max_length=200, null=True)
     fiat_currency = models.ForeignKey('ico.Currency', related_name='ico_fiat') # Base fiat currency for conversion rates, should be unchangable
-    fiat_rate =  MoneyField(default=Decimal(0)) # Base fiat currency rate of conversion to 1 ICO token.
     fiat_goal_amount = MoneyField(default=Decimal(0)) # Goal in base fiat currency, should be unchangable
     enabled = models.BooleanField(default=False)    
 

@@ -34,10 +34,13 @@ def root(request, format=None):
                  ('Deactivate', reverse('ico:deactivate',
                     request=request,
                     format=format)),
-                 ('Webhook', reverse('ico:webhook',
+                 ('Webhook', reverse('ico:admin-webhook',
                     request=request,
                     format=format)),
-                 ('Company', reverse('ico:company',
+                 ('Company', reverse('ico:admin-company',
+                    request=request,
+                    format=format)),
+                 ('Ico', reverse('ico:admin-icos',
                     request=request,
                     format=format))
                  ]
@@ -78,7 +81,7 @@ class DeactivateView(GenericAPIView):
         return Response({'status': 'success'})
 
 
-class WebhookView(GenericAPIView):
+class AdminWebhookView(GenericAPIView):
     """
     Receive a webhook event. Authenticates requests using a secret in the 
     Authorization header.
@@ -86,7 +89,7 @@ class WebhookView(GenericAPIView):
 
     allowed_methods = ('POST',)
     permission_classes = (AllowAny, )
-    serializer_class = WebhookSerializer
+    serializer_class = AdminWebhookSerializer
 
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -95,14 +98,14 @@ class WebhookView(GenericAPIView):
         return Response({'status': 'success'})
 
 
-class CompanyView(GenericAPIView):
+class AdminCompanyView(GenericAPIView):
     """
     View and update company. Authenticates requests using a token in the 
     Authorization header.
     """
 
     allowed_methods = ('GET', 'PATCH',)
-    serializer_class = CompanySerializer
+    serializer_class = AdminCompanySerializer
     authentication_classes = (AdminAuthentication,)
 
     def get(self, request, *args, **kwargs):
@@ -116,3 +119,102 @@ class CompanyView(GenericAPIView):
         serializer.is_valid(raise_exception=True)
         instance = serializer.save()
         return Response({'status': 'success', 'data': serializer.data})
+
+
+class AdminCurrencyList(GenericAPIView):
+    """
+    List and create ICOs.
+    """
+
+    allowed_methods = ('GET',)
+    serializer_class = AdminCurrencySerializer
+    authentication_classes = (AdminAuthentication,)
+
+    def get(self, request, *args, **kwargs):
+        company = request.user.company
+        queryset = Currency.objects.filter(company=company)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({'status': 'success', 'data': serializer.data})
+
+    # Need to be able to refresh enabled currencies.
+    # This should disable currencies that are no longer enabled.
+    # Perhaps a function to POST nothing will run refresh, or instead a
+    # refresh URL?
+
+
+class AdminIcoList(GenericAPIView):
+    """
+    List and create ICOs.
+    """
+
+    allowed_methods = ('GET', 'POST',)
+    serializer_class = AdminIcoSerializer
+    authentication_classes = (AdminAuthentication,)
+
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return AdminCreateIcoSerializer
+        return super(AdminIcoList, self).get_serializer_class()
+
+    def get(self, request, *args, **kwargs):
+        company = request.user.company
+        queryset = Ico.objects.filter(company=company)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({'status': 'success', 'data': serializer.data})
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        ico = serializer.save()
+        data = AdminIcoSerializer(serializer.instance, 
+            context={'request': request}).data
+        return Response({'status': 'success', 'data': data})
+
+
+class AdminIcoView(GenericAPIView):
+    """
+    View, update and delete ICOs.
+    """
+
+    allowed_methods = ('GET', 'PATCH', 'DELETE',)
+    serializer_class = AdminIcoSerializer
+    authentication_classes = (AdminAuthentication,)
+
+    def get(self, request, *args, **kwargs):
+        company = request.user.company
+        ico_id = kwargs['ico_id']
+
+        try:
+            ico = Ico.objects.get(company=company, id=ico_id)
+        except Ico.DoesNotExist:
+            raise exceptions.NotFound()
+
+        serializer = self.get_serializer(ico)
+        return Response({'status': 'success', 'data': serializer.data})
+
+    def patch(self, request, *args, **kwargs):
+        company = request.user.company
+        ico_id = kwargs['ico_id']
+
+        try:
+            ico = Ico.objects.get(company=company, id=ico_id)
+        except Ico.DoesNotExist:
+            raise exceptions.NotFound()
+
+        serializer = self.get_serializer(ico, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        instance = serializer.save()
+        return Response({'status': 'success', 'data': serializer.data})
+
+    def delete(self, request, *args, **kwargs):
+        company = request.user.company
+        ico_id = kwargs['ico_id']
+
+        try:
+            ico = Ico.objects.get(company=company, id=ico_id)
+        except Ico.DoesNotExist:
+            raise exceptions.NotFound()
+
+        serializer = self.get_serializer(ico)
+        instance = serializer.delete()
+        return Response({'status': 'success'})
