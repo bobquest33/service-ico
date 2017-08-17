@@ -12,3 +12,9 @@ class WebhookEvent(Enum):
     TRANSACTION_DELETE = 'transaction.delete'
     TRANSACTION_INITIATE = 'transaction.initiate'
     TRANSACTION_EXECUTE = 'transaction.execute'
+
+
+class PurchaseStatus(Enum):
+    PENDING = 'Pending'
+    COMPLETE = 'Complete'
+    FAILED = 'Failed'
