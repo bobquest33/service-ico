@@ -32,19 +32,10 @@ class DateModel(models.Model):
         return super(DateModel, self).save(*args, **kwargs)
 
 
-class User(DateModel):
-    identifier = models.UUIDField()
-    token = models.CharField(max_length=200, null=True)
-
-    def __str__(self):
-        return str(self.identifier)
-
-
 class Company(DateModel):
-    owner = models.OneToOneField(User)
     identifier = models.CharField(max_length=100, unique=True, db_index=True)
+    admin = models.OneToOneField('ico.User', related_name='admin_company')
     secret = models.UUIDField()
-    email = models.EmailField(null=True, blank=True)
     name = models.CharField(max_length=100, null=True, blank=True)
 
     def __str__(self):
@@ -67,3 +58,12 @@ class Company(DateModel):
             self.secret = uuid.uuid4()
 
         return super(Company, self).save(*args, **kwargs)
+
+
+class User(DateModel):
+    identifier = models.UUIDField()
+    token = models.CharField(max_length=200, null=True)
+    company = models.ForeignKey('ico.Company', null=True)
+
+    def __str__(self):
+        return str(self.identifier)

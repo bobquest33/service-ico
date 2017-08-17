@@ -66,6 +66,9 @@ class ActivateSerializer(serializers.Serializer):
                     email=rehive_company.get('company_email'),
                     name=rehive_company.get('name'))
 
+                user.company = company
+                user.save()
+
                 return company
 
         except Exception as exc:
@@ -101,8 +104,9 @@ class DeactivateSerializer(serializers.Serializer):
         return validated_data
 
     def delete(self):
-        # Deleting the owner will cascade delete the company.
-        self.validated_data['company'].owner.delete()
+        # Deleting the owner will cascade delete the company and all other
+        # children objects.
+        self.validated_data['company'].admin.delete()
 
 
 class WebhookSerializer(serializers.Serializer):
@@ -143,12 +147,12 @@ class CompanySerializer(serializers.ModelSerializer):
 
     identifier = serializers.CharField(read_only=True)
     secret = serializers.UUIDField(read_only=True)
-    email = serializers.CharField()
+    token = serializers.CharField(read_only=True, source='admin.token')
     name = serializers.CharField()
 
     class Meta:
         model = Company
-        fields = ('identifier', 'secret', 'email', 'name',)
+        fields = ('identifier', 'secret', 'token', 'name',)
 
     def update(self, instance, validated_data):
         for key, value in validated_data.items():

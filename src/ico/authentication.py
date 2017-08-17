@@ -5,7 +5,7 @@ from django.utils.encoding import smart_text
 from rest_framework import authentication, exceptions
 from rehive import Rehive, APIException
 
-from .models import Company
+from .models import Company, User
 
 from logging import getLogger
 
@@ -54,7 +54,38 @@ class AdminAuthentication(HeaderAuthentication):
             company = Company.objects.get(identifier=user['company'])
         except Company.DoesNotExist:
             raise exceptions.AuthenticationFailed(
-                _("Inactivate company. Please activate the company first."))
+                _("Inactive company. Please activate the company first."))
 
-        # Return the company owner details, not the (possibly temp) token.
-        return company.owner, company.owner.token
+        user, created = User.objects.get_or_create(
+            identifier=uuid.UUID(user['identifier']).hex,
+            company=company)
+
+        # Return the permanent token for (not the request token) the company.
+        return admin, company.admin.token
+
+
+class UserAuthentication(HeaderAuthentication):
+    """
+    Authentication for users.
+    """
+
+    def authenticate(self, request):
+        token = self.get_auth_header(request)
+
+        rehive = Rehive(token)
+
+        try:
+            user = rehive.user.get()        
+        except APIException:
+            raise exceptions.AuthenticationFailed(_('Invalid user'))
+
+        try:
+            company = Company.objects.get(identifier=user['company'])
+        except Company.DoesNotExist:
+            raise exceptions.AuthenticationFailed(_("Inactive company."))
+
+        user, created = User.objects.get_or_create(
+            identifier=uuid.UUID(user['identifier']).hex,
+            company=company)
+
+        return user, token
