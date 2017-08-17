@@ -102,12 +102,13 @@ class Phase(DateModel):
     ico = models.ForeignKey('ico.Ico')
     level = models.IntegerField()
     percentage = models.IntegerField(default=100)
+    fiat_rate = MoneyField(default=Decimal(0))
 
     def __str__(self):
         return str(self.ico) + "_" + str(self.level)
 
 
-class PhaseCurrency(DateModel):
+class Rate(DateModel):
     phase = models.ForeignKey('ico.Phase')
     currency = models.ForeignKey('ico.Currency')
     rate = MoneyField(default=Decimal(0))
@@ -118,7 +119,7 @@ class Quote(DateModel):
     user = models.ForeignKey('ico.User')
     deposit_amount = MoneyField(default=Decimal(0))
     token_amount = MoneyField(default=Decimal(0))
-    rate = MoneyField(default=Decimal(0)) # Rate of conversion between dpeosit currency and 1 token at time of quote.
+    rate = MoneyField(default=Decimal(0)) # Rate of conversion between deposit currency and 1 token at time of quote.
 
 
 class Purchase(DateModel):

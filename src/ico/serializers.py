@@ -1,7 +1,7 @@
 import json
 import uuid
 
-from rest_framework import serializers
+from rest_framework import serializers, exceptions
 from rest_framework.serializers import ModelSerializer
 from django.db import transaction
 
@@ -224,6 +224,9 @@ class AdminIcoSerializer(serializers.ModelSerializer):
     """
     Serialize ico, update and delete.
     """
+
+    currency = serializers.CharField(read_only=True)
+    fiat_currency = serializers.CharField(read_only=True)
     
     class Meta:
         model = Ico
@@ -242,3 +245,45 @@ class AdminIcoSerializer(serializers.ModelSerializer):
     def delete(self):
         instance = self.instance
         instance.delete()
+
+
+class AdminPhasesSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Phase
+        fields = ('level', 'percentage',)
+
+    def create(self, validated_data):
+        company = self.context.get('request').user.info.company
+        ico_id = self.context.get('view').kwargs.get('ico_id')
+
+        try:
+            validated_data['ico'] = Ico.objects.get(company=company, id=ico_id)
+        except Ico.DoesNotExist:
+            raise exceptions.NotFound()
+
+        return super(AdminCreatePhasesSerializer, self).create(validated_data)
+
+
+class AdminRatesSerializer(serializers.ModelSerializer):
+    currency = serializers.CharField()
+
+    class Meta:
+        model = Rate
+        fields = ('currency', 'rate')
+
+
+class AdminQuotesSerializer(serializers.ModelSerializer):
+    user = serializers.CharField()
+
+    class Meta:
+        model = Quote
+        fields = ('user', 'deposit_amount', 'token_amount', 'rate',)
+
+
+class AdminPurchasesSerializer(serializers.ModelSerializer):
+    quote = serializers.IntegerField(source='quote.id')
+
+    class Meta:
+        model = Purchase
+        fields = ('quote', 'depost_tx', 'token_tx', 'status')
