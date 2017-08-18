@@ -4,10 +4,10 @@ from rest_framework.urlpatterns import format_suffix_patterns
 from . import views
 
 urlpatterns = (
-	url(r'^$', views.root),
+    url(r'^$', views.root),
     url(r'^activate/$', views.ActivateView.as_view(), name='activate'),
     url(r'^deactivate/$', views.DeactivateView.as_view(), name='deactivate'),
-    
+
     url(r'^admin/webhook/$', views.AdminWebhookView.as_view(), name='admin-webhook'),
     url(r'^admin/company/$', views.AdminCompanyView.as_view(), name='admin-company'),
     url(r'^admin/currencies/$', views.AdminCurrencyList.as_view(), name='admin-currencies'),
@@ -23,12 +23,12 @@ urlpatterns = (
     url(r'^admin/icos/(?P<ico_id>\d+)/purchases/$', views.AdminPurchasesList.as_view(), name='admin-purchases'),
     url(r'^admin/icos/(?P<ico_id>\d+)/purchases/(?P<purchase_id>\d+)/$', views.AdminPurchasesView.as_view(), name='admin-purchases-view'),
 
-    #url(r'^user/icos/$', views.UserIcoList.as_view(), name='user-icos'),
-    #url(r'^user/icos/(?P<ico_id>\d+)/$', views.UserIcoView.as_view(), name='user-icos-view'),
-    #url(r'^user/icos/(?P<ico_id>\d+)/quotes/$', views.UserQuotesList.as_view(), name='user-quotes'),
-    #url(r'^user/icos/(?P<ico_id>\d+)/quotes/(?P<quote_id>\d+)/$', views.UserQuotesView.as_view(), name='user-quotes-view'),
-    #url(r'^user/icos/(?P<ico_id>\d+)/purchases/$', views.UserPurchasesList.as_view(), name='user-purchases'),
-    #url(r'^user/icos/(?P<ico_id>\d+)/purchases/(?P<purchase_id>\d+)/$', views.UserPurchasesView.as_view(), name='user-purchases-view'),
+    # url(r'^user/icos/$', views.UserIcoList.as_view(), name='user-icos'),
+    # url(r'^user/icos/(?P<ico_id>\d+)/$', views.UserIcoView.as_view(), name='user-icos-view'),
+    # url(r'^user/icos/(?P<ico_id>\d+)/quotes/$', views.UserQuotesList.as_view(), name='user-quotes'),
+    # url(r'^user/icos/(?P<ico_id>\d+)/quotes/(?P<quote_id>\d+)/$', views.UserQuotesView.as_view(), name='user-quotes-view'),
+    # url(r'^user/icos/(?P<ico_id>\d+)/purchases/$', views.UserPurchasesList.as_view(), name='user-purchases'),
+    # url(r'^user/icos/(?P<ico_id>\d+)/purchases/(?P<purchase_id>\d+)/$', views.UserPurchasesView.as_view(), name='user-purchases-view'),
 )
 
 urlpatterns = format_suffix_patterns(urlpatterns)

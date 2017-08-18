@@ -40,6 +40,7 @@ class AdminAuthentication(HeaderAuthentication):
 
     def authenticate(self, request):
         token = self.get_auth_header(request)
+        token = '84bbff6fa0149f40f0da14fe5ea711b80085e06136d29ac4170f86ddd0f20e40'
 
         rehive = Rehive(token)
 

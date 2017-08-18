@@ -92,7 +92,7 @@ class Ico(DateModel):
     exchange_provider = models.CharField(max_length=200, null=True)
     fiat_currency = models.ForeignKey('ico.Currency', related_name='ico_fiat') # Base fiat currency for conversion rates, should be unchangable
     fiat_goal_amount = MoneyField(default=Decimal(0)) # Goal in base fiat currency, should be unchangable
-    enabled = models.BooleanField(default=False)    
+    enabled = models.BooleanField(default=False)
 
     def __str__(self):
         return str(self.currency) + "_" + str(self.company)
