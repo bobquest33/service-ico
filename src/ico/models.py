@@ -118,6 +118,7 @@ class Quote(DateModel):
     phase = models.ForeignKey('ico.Phase')
     user = models.ForeignKey('ico.User')
     deposit_amount = MoneyField(default=Decimal(0))
+    deposit_currency = models.ForeignKey('ico.Currency')
     token_amount = MoneyField(default=Decimal(0))
     rate = MoneyField(default=Decimal(0)) # Rate of conversion between deposit currency and 1 token at time of quote.
 

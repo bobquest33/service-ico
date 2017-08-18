@@ -46,8 +46,14 @@ def root(request, format=None):
                  ('Ico', reverse('ico:admin-icos',
                     request=request,
                     format=format))
-                 ]
-            )}
+                ]
+            )},
+            {'Users': OrderedDict(
+                [('Ico', reverse('ico:user-icos',
+                    request=request,
+                    format=format))
+                ]
+            )},
     ])
 
 
@@ -245,13 +251,13 @@ class AdminIcoView(GenericAPIView):
         return Response({'status': 'success'})
 
 
-class AdminPhasesList(GenericAPIView):
+class AdminPhaseList(GenericAPIView):
     """
     List and create phases.
     """
 
     allowed_methods = ('GET', 'POST',)
-    serializer_class = AdminPhasesSerializer
+    serializer_class = AdminPhaseSerializer
     authentication_classes = (AdminAuthentication,)
 
     def get(self, request, *args, **kwargs):
@@ -274,13 +280,13 @@ class AdminPhasesList(GenericAPIView):
         return Response({'status': 'success', 'data': serializer.data})        
 
 
-class AdminPhasesView(GenericAPIView):
+class AdminPhaseView(GenericAPIView):
     """
     View and delete phases.
     """
 
     allowed_methods = ('GET', 'DELETE',)
-    serializer_class = AdminPhasesSerializer
+    serializer_class = AdminPhaseSerializer
     authentication_classes = (AdminAuthentication,)
 
     def get(self, request, *args, **kwargs):
@@ -313,13 +319,13 @@ class AdminPhasesView(GenericAPIView):
         return Response({'status': 'success'})
 
 
-class AdminRatesList(GenericAPIView):
+class AdminRateList(GenericAPIView):
     """
     List and create rates.
     """
 
     allowed_methods = ('GET',)
-    serializer_class = AdminRatesSerializer
+    serializer_class = AdminRateSerializer
     authentication_classes = (AdminAuthentication,)
 
     def get(self, request, *args, **kwargs):
@@ -338,13 +344,13 @@ class AdminRatesList(GenericAPIView):
         return Response({'status': 'success', 'data': serializer.data})
 
 
-class AdminRatesView(GenericAPIView):
+class AdminRateView(GenericAPIView):
     """
     View, update and delete rates.
     """
 
     allowed_methods = ('GET',)
-    serializer_class = AdminRatesSerializer
+    serializer_class = AdminRateSerializer
     authentication_classes = (AdminAuthentication,)
 
     def get(self, request, *args, **kwargs):
@@ -363,13 +369,13 @@ class AdminRatesView(GenericAPIView):
         return Response({'status': 'success', 'data': serializer.data})
 
 
-class AdminQuotesList(GenericAPIView):
+class AdminQuoteList(GenericAPIView):
     """
     List and create quotes.
     """
 
     allowed_methods = ('GET',)
-    serializer_class = AdminQuotesSerializer
+    serializer_class = AdminQuoteSerializer
     authentication_classes = (AdminAuthentication,)
 
     def get(self, request, *args, **kwargs):
@@ -386,13 +392,13 @@ class AdminQuotesList(GenericAPIView):
         return Response({'status': 'success', 'data': serializer.data})
 
 
-class AdminQuotesView(GenericAPIView):
+class AdminQuoteView(GenericAPIView):
     """
     View, update and delete quotes.
     """
 
     allowed_methods = ('GET',)
-    serializer_class = AdminQuotesSerializer
+    serializer_class = AdminQuoteSerializer
     authentication_classes = (AdminAuthentication,)
 
     def get(self, request, *args, **kwargs):
@@ -410,13 +416,13 @@ class AdminQuotesView(GenericAPIView):
         return Response({'status': 'success', 'data': serializer.data})
 
 
-class AdminPurchasesList(GenericAPIView):
+class AdminPurchaseList(GenericAPIView):
     """
     List and create purchases.
     """
 
     allowed_methods = ('GET',)
-    serializer_class = AdminPurchasesSerializer
+    serializer_class = AdminPurchaseSerializer
     authentication_classes = (AdminAuthentication,)
 
     def get(self, request, *args, **kwargs):
@@ -433,13 +439,13 @@ class AdminPurchasesList(GenericAPIView):
         return Response({'status': 'success', 'data': serializer.data})
 
 
-class AdminPurchasesView(GenericAPIView):
+class AdminPurchaseView(GenericAPIView):
     """
     View, update and delete purchases.
     """
 
     allowed_methods = ('GET',)
-    serializer_class = AdminPurchasesSerializer
+    serializer_class = AdminPurchaseSerializer
     authentication_classes = (AdminAuthentication,)
 
     def get(self, request, *args, **kwargs):
@@ -450,6 +456,151 @@ class AdminPurchasesView(GenericAPIView):
         try:
             purchase = Purchase.objects.get(id=purchase_id, 
                 quote__phase__ico_id=ico_id, quote__phase__ico__company=company)
+        except Purchase.DoesNotExist:
+            raise exceptions.NotFound()
+
+        serializer = self.get_serializer(purchase)
+        return Response({'status': 'success', 'data': serializer.data})
+
+
+class UserIcoList(GenericAPIView):
+    """
+    List and create ICOs.
+    """
+
+    allowed_methods = ('GET',)
+    serializer_class = UserIcoSerializer
+    authentication_classes = (UserAuthentication,)
+
+    def get(self, request, *args, **kwargs):
+        company = request.user.company
+        queryset = Ico.objects.filter(company=company)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({'status': 'success', 'data': serializer.data})
+
+
+class UserIcoView(GenericAPIView):
+    """
+    View, update and delete ICOs.
+    """
+
+    allowed_methods = ('GET',)
+    serializer_class = UserIcoSerializer
+    authentication_classes = (UserAuthentication,)
+
+    def get(self, request, *args, **kwargs):
+        company = request.user.company
+        ico_id = kwargs['ico_id']
+
+        try:
+            ico = Ico.objects.get(company=company, id=ico_id)
+        except Ico.DoesNotExist:
+            raise exceptions.NotFound()
+
+        serializer = self.get_serializer(ico)
+        return Response({'status': 'success', 'data': serializer.data})
+
+
+class UserQuoteList(GenericAPIView):
+    """
+    List and create quotes.
+    """
+
+    allowed_methods = ('GET', 'POST',)
+    serializer_class = UserQuoteSerializer
+    authentication_classes = (UserAuthentication,)
+
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return UserCreateQuoteSerializer
+        return super(UserQuoteList, self).get_serializer_class()
+
+    def get(self, request, *args, **kwargs):
+        user = request.user
+        ico_id = kwargs['ico_id']
+
+        try:
+            ico = Ico.objects.get(company=user.company, id=ico_id)
+        except Ico.DoesNotExist:
+            raise exceptions.NotFound()
+
+        queryset = Quote.objects.filter(user=user, phase__ico=ico)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({'status': 'success', 'data': serializer.data})
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        ico = serializer.save()
+        data = UserQuoteSerializer(serializer.instance, 
+            context={'request': request}).data
+        return Response({'status': 'success', 'data': data})
+
+class UserQuoteView(GenericAPIView):
+    """
+    View, update and delete quotes.
+    """
+
+    allowed_methods = ('GET',)
+    serializer_class = UserQuoteSerializer
+    authentication_classes = (UserAuthentication,)
+
+    def get(self, request, *args, **kwargs):
+        user = user.company
+        ico_id = kwargs['ico_id']
+        quote_id = kwargs['quote_id']
+
+        try:
+            quote = Quote.objects.get(id=quote_id, phase__ico_id=ico_id, 
+                phase__user=user)
+        except Quote.DoesNotExist:
+            raise exceptions.NotFound()
+
+        serializer = self.get_serializer(quote)
+        return Response({'status': 'success', 'data': serializer.data})
+
+
+class UserPurchaseList(GenericAPIView):
+    """
+    List and create purchases.
+    """
+
+    allowed_methods = ('GET',)
+    serializer_class = UserPurchaseSerializer
+    authentication_classes = (UserAuthentication,)
+
+    def get(self, request, *args, **kwargs):
+        user = request.user
+        ico_id = kwargs['ico_id']
+
+        try:
+            ico = Ico.objects.get(company=user.company, id=ico_id)
+        except Ico.DoesNotExist:
+            raise exceptions.NotFound()
+
+        queryset = Purchase.objects.filter(quote__user=user, 
+            quote__phase__ico=ico)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({'status': 'success', 'data': serializer.data})
+
+
+class UserPurchaseView(GenericAPIView):
+    """
+    View, update and delete purchases.
+    """
+
+    allowed_methods = ('GET',)
+    serializer_class = UserPurchaseSerializer
+    authentication_classes = (UserAuthentication,)
+
+    def get(self, request, *args, **kwargs):
+        user = request.user
+        ico_id = kwargs['ico_id']
+        purchase_id = kwargs['purchase_id']
+
+        try:
+            purchase = Purchase.objects.get(id=purchase_id, 
+                quote__phase__ico_id=ico_id, quote__phase__user=user)
         except Purchase.DoesNotExist:
             raise exceptions.NotFound()
 
