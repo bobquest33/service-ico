@@ -21,7 +21,7 @@ class ActivateSerializer(serializers.Serializer):
     user.
     """
 
-    token = serializers.CharField(write_only=True)
+    token = serializers.CharField()
     identifier = serializers.CharField(read_only=True)
     name = serializers.CharField(read_only=True)
     secret = serializers.UUIDField(read_only=True)
@@ -155,7 +155,8 @@ class AdminCurrencySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Currency
-        fields = ('code', 'description', 'symbol', 'unit', 'divisibility',)
+        fields = ('code', 'description', 'symbol', 'unit', 'divisibility', 
+            'enabled')
 
 
 class AdminCompanySerializer(serializers.ModelSerializer):
@@ -185,11 +186,12 @@ class AdminCreateIcoSerializer(serializers.ModelSerializer):
     Serialize ico, create
     """
 
-    company = serializers.CharField()
+    currency = serializers.CharField()
+    fiat_currency = serializers.CharField()
 
     class Meta:
         model = Ico
-        fields = ('currency', 'exchange_provider', 'fiat_currency', 
+        fields = ('currency', 'number', 'exchange_provider', 'fiat_currency', 
             'fiat_goal_amount', 'enabled')
         
     def validate_currency(self, currency):
@@ -201,7 +203,7 @@ class AdminCreateIcoSerializer(serializers.ModelSerializer):
         except Currency.DoesNotExist:
             raise serializers.ValidationError("Invalid currency.")
 
-    def validate_fiat_currency(seld, currency):
+    def validate_fiat_currency(self, currency):
         company = self.context['request'].user.company
 
         try:
@@ -212,7 +214,7 @@ class AdminCreateIcoSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data['company'] = self.context['request'].user.company
-        return Notification.objects.create(**validated_data)
+        return Ico.objects.create(**validated_data)
 
 
 class AdminIcoSerializer(serializers.ModelSerializer):
@@ -246,10 +248,10 @@ class AdminPhasesSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Phase
-        fields = ('level', 'percentage',)
+        fields = ('id', 'level', 'percentage', 'fiat_rate',)
 
     def create(self, validated_data):
-        company = self.context.get('request').user.info.company
+        company = self.context.get('request').user.company
         ico_id = self.context.get('view').kwargs.get('ico_id')
 
         try:
@@ -257,7 +259,7 @@ class AdminPhasesSerializer(serializers.ModelSerializer):
         except Ico.DoesNotExist:
             raise exceptions.NotFound()
 
-        return super(AdminCreatePhasesSerializer, self).create(validated_data)
+        return super(AdminPhasesSerializer, self).create(validated_data)
 
 
 class AdminRatesSerializer(serializers.ModelSerializer):
@@ -273,7 +275,7 @@ class AdminQuotesSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Quote
-        fields = ('user', 'deposit_amount', 'token_amount', 'rate',)
+        fields = ('user', 'phase', 'deposit_amount', 'token_amount', 'rate',)
 
 
 class AdminPurchasesSerializer(serializers.ModelSerializer):
@@ -281,4 +283,4 @@ class AdminPurchasesSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Purchase
-        fields = ('quote', 'depost_tx', 'token_tx', 'status')
+        fields = ('quote', 'phase', 'depost_tx', 'token_tx', 'status')

@@ -105,7 +105,7 @@ class Phase(DateModel):
     fiat_rate = MoneyField(default=Decimal(0))
 
     def __str__(self):
-        return str(self.ico) + "_" + str(self.level)
+        return str(self.level)
 
 
 class Rate(DateModel):

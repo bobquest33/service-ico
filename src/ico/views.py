@@ -40,6 +40,9 @@ def root(request, format=None):
                  ('Company', reverse('ico:admin-company',
                     request=request,
                     format=format)),
+                 ('Currencies', reverse('ico:admin-currencies',
+                    request=request,
+                    format=format)),
                  ('Ico', reverse('ico:admin-icos',
                     request=request,
                     format=format))
@@ -156,7 +159,7 @@ class AdminCurrencyView(GenericAPIView):
         code = kwargs['code']
 
         try:
-            currency = Currency.objects.get(company=company, code__iexect=code)
+            currency = Currency.objects.get(company=company, code__iexact=code)
         except Currency.DoesNotExist:
             raise exceptions.NotFound()
 
@@ -315,7 +318,7 @@ class AdminRatesList(GenericAPIView):
     List and create rates.
     """
 
-    allowed_methods = ('GET', 'POST',)
+    allowed_methods = ('GET',)
     serializer_class = AdminRatesSerializer
     authentication_classes = (AdminAuthentication,)
 
@@ -365,7 +368,7 @@ class AdminQuotesList(GenericAPIView):
     List and create quotes.
     """
 
-    allowed_methods = ('GET', 'POST',)
+    allowed_methods = ('GET',)
     serializer_class = AdminQuotesSerializer
     authentication_classes = (AdminAuthentication,)
 
@@ -378,7 +381,7 @@ class AdminQuotesList(GenericAPIView):
         except Ico.DoesNotExist:
             raise exceptions.NotFound()
 
-        queryset = Quote.objects.filter(ico=ico)
+        queryset = Quote.objects.filter(phase__ico=ico)
         serializer = self.get_serializer(queryset, many=True)
         return Response({'status': 'success', 'data': serializer.data})
 
@@ -398,8 +401,8 @@ class AdminQuotesView(GenericAPIView):
         quote_id = kwargs['quote_id']
 
         try:
-            quote = Quote.objects.get(id=quote_id, ico_id=ico_id,
-                ico__company=company)
+            quote = Quote.objects.get(id=quote_id, phase__ico_id=ico_id, 
+                phase__ico__company=company)
         except Quote.DoesNotExist:
             raise exceptions.NotFound()
 
@@ -425,7 +428,7 @@ class AdminPurchasesList(GenericAPIView):
         except Ico.DoesNotExist:
             raise exceptions.NotFound()
 
-        queryset = Purchase.objects.filter(ico=ico)
+        queryset = Purchase.objects.filter(quote__phase__ico=ico)
         serializer = self.get_serializer(queryset, many=True)
         return Response({'status': 'success', 'data': serializer.data})
 
@@ -445,8 +448,8 @@ class AdminPurchasesView(GenericAPIView):
         purchase_id = kwargs['purchase_id']
 
         try:
-            purchase = Purchase.objects.get(id=purchase_id, ico_id=ico_id,
-                ico__company=company)
+            purchase = Purchase.objects.get(id=purchase_id, 
+                quote__phase__ico_id=ico_id, quote__phase__ico__company=company)
         except Purchase.DoesNotExist:
             raise exceptions.NotFound()
 
