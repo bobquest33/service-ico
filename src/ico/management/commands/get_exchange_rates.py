@@ -1,6 +1,7 @@
 from requests import request
+from decimal import Decimal
 from django.core.management.base import BaseCommand, CommandError
-from django.core.cache import cache, InvalidCacheBackendError
+from django.core.cache import cache, InvalidCacheBackendError, caches
 from ico.models import Rate, Phase, Currency, Ico
 
 
@@ -22,16 +23,18 @@ CRYPTO_RATES_CACHE_KEY = 'ico_service_crypto_rates'
 
 def get_fiat_rates():
     rates = cache.get(FIAT_RATES_CACHE_KEY)
-    if not rates:
-        rates = request('GET', FIAT_RATES).json()
+    if rates is None:
+        rates = request('GET', FIAT_RATES).json().get('rates')
+        print("----> Request made (FIAT_RATES)")
         cache.set(FIAT_RATES_CACHE_KEY, rates, 600)
     return rates
 
 
 def get_crypto_rates():
     rates = cache.get(CRYPTO_RATES_CACHE_KEY)
-    if not rates:
+    if rates is None:
         rates = request('GET', CRYPTO_RATES).json()
+        print("----> Request made (CRYPTO_RATES)")
         cache.set(CRYPTO_RATES_CACHE_KEY, rates, 600)
     return rates
 
@@ -46,32 +49,53 @@ class Command(BaseCommand):
     Exchange used: https://apiv2.bitcoinaverage.com/
     Exchange limit: 5000 requests per month
     """
-    help = "Get exchange rates and update ICO Rates"
+    help = "Get exchange rates and calculate ICO Rates"
 
     def handle(self, *args, **kwargs):
         crypto_rates = get_crypto_rates()
         fiat_rates = get_fiat_rates()
 
-        import pdb; pdb.set_trace()
+        for phase in Phase.objects.all():
+            for currency in phase.ico.company.currency_set.all():
+                rate, _ = Rate.objects.get_or_create(phase=phase, currency=currency)
 
-        for ico in Ico.objects.all():
-            for phase in ico.phase_set.all():
-                for currency in ico.company.currency_set.all():
-                    rate = Rate.objects.get_or_create(phase=phase, currency=currency)
-                    if currency == ico.currency:
-                        rate.rate = 1
-                    elif currency == ico.fiat_currency:
-                        rate.rate = phase.fiat_rate
+                if currency == phase.ico.currency:
+                    rate.rate = 1
+
+                elif currency == phase.ico.fiat_currency:
+                    rate.rate = phase.fiat_rate
+
+                else:
+                    currency_code = currency.code
+                    # The exchange lists bitcoin as BTC not XBT
+                    if currency.code == 'XBT':
+                        currency_code = 'BTC'
+
+                    if currency_code in fiat_rates.keys():
+                        fiat_rate = Decimal(fiat_rates[currency_code]['rate'])
+
+                        if phase.ico.currency.code == 'USD':
+                            rate.rate = fiat_rate * phase.fiat_rate
+                        else:
+                            rate.rate = (1 / fiat_rate) * phase.fiat_rate
+
                     else:
-                        if currency.code in fiat_rates['rates'].keys():
-                            rate = fiat_rates['rates'][currency.code]
-                            if ico.currency.code == 'USD':
-                                rate.rate = rate * phase.fiat_rate
-                            else:
-                                rate.rate = (1 / rate) * phase.fiat_rate
-                        elif currency.code in crypto_rates['rates'].keys():
-                            # TODO: Calculate crypto fee
-                            # crypto in terms of USD
+                        ico_fiat_currency_code = phase.ico.fiat_currency.code
+                        # The exchange lists bitcoin as BTC not XBT
+                        if phase.ico.fiat_currency.code == 'XBT':
+                            ico_fiat_currency_code = 'BTC'
+                        symbol = currency_code + ico_fiat_currency_code
+                        reverse_symbol = ico_fiat_currency_code + currency_code
+
+                        if symbol in crypto_rates.keys():
+                            crypto_rate = crypto_rates[symbol]['last']
+                            rate.rate = crypto_rate * phase.fiat_rate
+
+                        elif reverse_symbol in crypto_rates.keys():
+                            crypto_rate = crypto_rates[reverse_symbol]['last']
+                            rate.rate = (1 / crypto_rate) * phase.fiat_rate
+
+                rate.save()
 
 
 
