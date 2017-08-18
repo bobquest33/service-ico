@@ -21,7 +21,7 @@ class ActivateSerializer(serializers.Serializer):
     user.
     """
 
-    token = serializers.CharField()
+    token = serializers.CharField(source="admin.token")
     identifier = serializers.CharField(read_only=True)
     name = serializers.CharField(read_only=True)
     secret = serializers.UUIDField(read_only=True)
