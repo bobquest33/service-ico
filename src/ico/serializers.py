@@ -23,7 +23,7 @@ class ActivateSerializer(serializers.Serializer):
 
     token = serializers.CharField(write_only=True)
     identifier = serializers.CharField(read_only=True)
-    email = serializers.CharField(read_only=True)
+    name = serializers.CharField(read_only=True)
     secret = serializers.UUIDField(read_only=True)
 
     def validate(self, validated_data):
@@ -47,7 +47,7 @@ class ActivateSerializer(serializers.Serializer):
                 {"token": ["Company already activated."]})
 
         try:
-            currencies = rehive.currencies.get()
+            currencies = rehive.company.currencies.get()
         except APIException:
             raise serializers.ValidationError({"non_field_errors": 
                 ["Unkown error."]})
@@ -64,28 +64,23 @@ class ActivateSerializer(serializers.Serializer):
         rehive_company = validated_data.get('company')
         currencies = validated_data.get('currencies')
 
-        try:
-            with transaction.atomic():
-                user = User.objects.create(token=token,
-                    identifier=uuid.UUID(rehive_user['identifier']).hex)
+        with transaction.atomic():
+            user = User.objects.create(token=token,
+                identifier=uuid.UUID(rehive_user['identifier']).hex)
 
-                company = Company.objects.create(owner=user, 
-                    identifier=rehive_company.get('identifier'),
-                    email=rehive_company.get('company_email'),
-                    name=rehive_company.get('name'))
+            company = Company.objects.create(admin=user, 
+                identifier=rehive_company.get('identifier'),
+                name=rehive_company.get('name'))
 
-                user.company = company
-                user.save()
+            user.company = company
+            user.save()
 
-                # Add currencies to company automatically.
-                for kwargs in currencies:
-                    kwargs['company'] = company
-                    currency = Currency.objects.create(**kwargs)
+            # Add currencies to company automatically.
+            for kwargs in currencies:
+                kwargs['company'] = company
+                currency = Currency.objects.create(**kwargs)
 
-                return company
-
-        except Exception as exc:
-            raise serializers.ValidationError(exc)
+            return company
 
 
 class DeactivateSerializer(serializers.Serializer):
