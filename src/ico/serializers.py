@@ -227,9 +227,9 @@ class AdminIcoSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Ico
-        fields = ('id', 'currency', 'exchange_provider', 'fiat_currency', 
+        fields = ('id', 'currency', 'number', 'exchange_provider', 'fiat_currency', 
             'fiat_goal_amount', 'enabled')
-        read_only_field = ('id', 'currency', 'fiat_currency', 
+        read_only_field = ('id', 'currency', 'number', 'fiat_currency', 
             'fiat_goal_amount',)
 
     def update(self, instance, validated_data):

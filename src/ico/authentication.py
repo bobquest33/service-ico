@@ -61,7 +61,7 @@ class AdminAuthentication(HeaderAuthentication):
             company=company)
 
         # Return the permanent token for (not the request token) the company.
-        return user, company.admin.token
+        return admin, company.admin.token
 
 
 class UserAuthentication(HeaderAuthentication):
