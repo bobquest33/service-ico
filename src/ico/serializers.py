@@ -227,9 +227,9 @@ class AdminIcoSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Ico
-        fields = ('id', 'currency', 'exchange_provider', 'fiat_currency', 
+        fields = ('id', 'currency', 'number', 'exchange_provider', 'fiat_currency', 
             'fiat_goal_amount', 'enabled')
-        read_only_field = ('id', 'currency', 'fiat_currency', 
+        read_only_field = ('id', 'currency', 'number', 'fiat_currency', 
             'fiat_goal_amount',)
 
     def update(self, instance, validated_data):
@@ -244,7 +244,7 @@ class AdminIcoSerializer(serializers.ModelSerializer):
         instance.delete()
 
 
-class AdminPhasesSerializer(serializers.ModelSerializer):
+class AdminPhaseSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Phase
@@ -259,10 +259,10 @@ class AdminPhasesSerializer(serializers.ModelSerializer):
         except Ico.DoesNotExist:
             raise exceptions.NotFound()
 
-        return super(AdminPhasesSerializer, self).create(validated_data)
+        return super(AdminPhaseSerializer, self).create(validated_data)
 
 
-class AdminRatesSerializer(serializers.ModelSerializer):
+class AdminRateSerializer(serializers.ModelSerializer):
     currency = serializers.CharField()
 
     class Meta:
@@ -270,15 +270,85 @@ class AdminRatesSerializer(serializers.ModelSerializer):
         fields = ('currency', 'rate')
 
 
-class AdminQuotesSerializer(serializers.ModelSerializer):
+class AdminQuoteSerializer(serializers.ModelSerializer):
     user = serializers.CharField()
+    deposit_currency = serializers.CharField()
 
     class Meta:
         model = Quote
-        fields = ('user', 'phase', 'deposit_amount', 'token_amount', 'rate',)
+        fields = ('user', 'phase', 'deposit_amount', 'deposit_currency',
+            'token_amount', 'rate',)
 
 
-class AdminPurchasesSerializer(serializers.ModelSerializer):
+class AdminPurchaseSerializer(serializers.ModelSerializer):
+    quote = serializers.IntegerField(source='quote.id')
+
+    class Meta:
+        model = Purchase
+        fields = ('quote', 'phase', 'depost_tx', 'token_tx', 'status')
+
+
+class UserIcoSerializer(serializers.ModelSerializer):
+    """
+    Serialize ico, update and delete.
+    """
+
+    currency = serializers.CharField(read_only=True)
+    fiat_currency = serializers.CharField(read_only=True)
+    
+    class Meta:
+        model = Ico
+        fields = ('id', 'currency', 'number', 'exchange_provider', 'fiat_currency', 
+            'fiat_goal_amount', 'enabled')
+
+
+class UserCreateQuoteSerializer(serializers.ModelSerializer):
+    deposit_amount = serializers.DecimalField(max_digits=28, decimal_places=18, 
+        required=False)
+    deposit_currency = serializers.CharField()
+    token_amount = serializers.DecimalField(max_digits=28, decimal_places=18, 
+        required=False)
+
+    class Meta:
+        model = Quote
+        fields = ('deposit_amount', 'deposit_currency', 'token_amount',)
+
+    def validate_deposit_currency(self, currency):
+        company = self.context['request'].user.company
+
+        try:
+            return Currency.objects.get(code__iexact=currency, company=company, 
+                enabled=True)  
+        except Currency.DoesNotExist:
+            raise serializers.ValidationError("Invalid currency.")
+
+    def create(self, validated_data):
+        company = self.context.get('request').user.company
+        ico_id = self.context.get('view').kwargs.get('ico_id')
+
+        try:
+            validated_data['ico'] = Ico.objects.get(company=company, id=ico_id)
+        except Ico.DoesNotExist:
+            raise exceptions.NotFound()
+
+        # ----------------------------------------------------------------------
+        # Do complex quote creation logic HERE
+        # ----------------------------------------------------------------------
+
+        return super(AdminPhaseSerializer, self).create(validated_data)
+
+
+class UserQuoteSerializer(serializers.ModelSerializer):
+    user = serializers.CharField()
+    deposit_currency = serializers.CharField()
+
+    class Meta:
+        model = Quote
+        fields = ('user', 'phase', 'deposit_amount', 'deposit_currency', 
+            'token_amount', 'rate',)
+
+
+class UserPurchaseSerializer(serializers.ModelSerializer):
     quote = serializers.IntegerField(source='quote.id')
 
     class Meta:

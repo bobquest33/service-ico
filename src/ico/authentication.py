@@ -72,6 +72,7 @@ class UserAuthentication(HeaderAuthentication):
 
     def authenticate(self, request):
         token = self.get_auth_header(request)
+        token = '8fffbfd18af2fd20658bcec24392a31eea0cb41b91d2a9ee981eb33dc9a72f09'
 
         rehive = Rehive(token)
 
