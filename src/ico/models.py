@@ -5,10 +5,9 @@ from decimal import Decimal
 
 from django.db import models
 from django.utils.timezone import utc
-from django.template import Template
-from django.template import Context
 
 from ico.enums import PurchaseStatus
+from ico.rates import get_crypto_rates, get_fiat_rates
 
 from logging import getLogger
 
@@ -92,7 +91,7 @@ class Ico(DateModel):
     exchange_provider = models.CharField(max_length=200, null=True)
     fiat_currency = models.ForeignKey('ico.Currency', related_name='ico_fiat') # Base fiat currency for conversion rates, should be unchangable
     fiat_goal_amount = MoneyField(default=Decimal(0)) # Goal in base fiat currency, should be unchangable
-    enabled = models.BooleanField(default=False)    
+    enabled = models.BooleanField(default=False)
 
     def __str__(self):
         return str(self.currency) + "_" + str(self.company)
@@ -112,6 +111,84 @@ class Rate(DateModel):
     phase = models.ForeignKey('ico.Phase')
     currency = models.ForeignKey('ico.Currency')
     rate = MoneyField(default=Decimal(0))
+
+    def set_rate(self):
+        """
+        Calculate the rate based on the most recent rates data
+        from the exchange. Calculations are done with relation to the
+        ICO currency itself, or USD.
+
+        All exchange fiat rates are USD based which, going forward, will be
+        referred to as "forward" rates and the inverse as the "backwards" rate.
+        Eg.
+            Forward: USD -> EUR
+            Backward: EUR -> USD
+
+        The same is done with crypto currency pairs (symbols), which are only
+        listed in one direction.
+        Eg.
+            Forward: ETHBTC
+            Backward: BTCETH
+        """
+
+        # Get the updated rates from the exchange or caches
+        crypto_rates = get_crypto_rates()
+        fiat_rates = get_fiat_rates()
+
+        # The ICO currency is worth one of itself
+        if self.currency == self.phase.ico.currency:
+            self.rate = 1
+
+        # This is the rate set in the phase so already has the proper rate
+        elif self.currency == self.phase.ico.fiat_currency:
+            self.rate = self.phase.fiat_rate
+
+        else:
+            currency_code = self.currency.code
+
+            # The exchange lists bitcoin as BTC not XBT
+            if self.currency.code == 'XBT':
+                currency_code = 'BTC'
+
+            if currency_code in fiat_rates.keys():
+                fiat_rate = Decimal(fiat_rates[currency_code]['rate'])
+
+                if self.phase.ico.currency.code == 'USD':
+                    # "Forward" checking of the rates symbol since they
+                    # are USD based. Do the normal rate calculation.
+                    self.rate = fiat_rate * self.phase.fiat_rate
+                else:
+                    # Inverse calculation to get the rate with
+                    # relation to USD.
+                    self.rate = (1 / fiat_rate) * self.phase.fiat_rate
+
+            else:
+                ico_fiat_currency_code = self.phase.ico.fiat_currency.code
+
+                # The exchange lists bitcoin as BTC not XBT
+                if self.phase.ico.fiat_currency.code == 'XBT':
+                    ico_fiat_currency_code = 'BTC'
+
+                # For crypto currencies the rates are listed in
+                # currency pairs (symbols), in which case we would need to
+                # check them both ways because they are only listed
+                # in one "direction"
+                symbol = currency_code + ico_fiat_currency_code
+                reverse_symbol = ico_fiat_currency_code + currency_code
+
+                if symbol in crypto_rates.keys():
+                    # "Forward" checking of the rates symbol. If it
+                    # matches do the normal rate calculation
+                    crypto_rate = crypto_rates[symbol]['last']
+                    self.rate = crypto_rate * self.phase.fiat_rate
+
+                elif reverse_symbol in crypto_rates.keys():
+                    # "Backwards" checking on the rates symbol. If it
+                    # matches do the inverse rate calculation
+                    crypto_rate = crypto_rates[reverse_symbol]['last']
+                    self.rate = (1 / crypto_rate) * self.phase.fiat_rate
+
+        self.save()
 
 
 class Quote(DateModel):
