@@ -536,6 +536,7 @@ class UserQuoteList(GenericAPIView):
             context={'request': request}).data
         return Response({'status': 'success', 'data': data})
 
+
 class UserQuoteView(GenericAPIView):
     """
     View, update and delete quotes.

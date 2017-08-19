@@ -322,6 +322,22 @@ class UserCreateQuoteSerializer(serializers.ModelSerializer):
         except Currency.DoesNotExist:
             raise serializers.ValidationError("Invalid currency.")
 
+    def validate(self, validated_data):
+        deposit_amount = validated_data.get('deposit_amount')
+        token_amount = validated_data.get('token_amount')
+
+        if not deposit_amount and not token_amount:
+            raise serializers.ValidationError(
+                {"non_field_errors": 
+                    ["A deposit amount or token amount must be inserted."]})            
+
+        if deposit_amount and token_amount:
+            raise serializers.ValidationError(
+                {"non_field_errors": 
+                    ["only deposit amount or token amount must be inserted."]})
+
+        return validated_data       
+
     def create(self, validated_data):
         company = self.context.get('request').user.company
         ico_id = self.context.get('view').kwargs.get('ico_id')
