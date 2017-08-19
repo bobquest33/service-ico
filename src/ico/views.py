@@ -34,7 +34,10 @@ def root(request, format=None):
                  ('Deactivate', reverse('ico:deactivate',
                     request=request,
                     format=format)),
-                 ('Webhook', reverse('ico:admin-webhook',
+                 ('Initiate Webhook', reverse('ico:admin-webhooks-initiate',
+                    request=request,
+                    format=format)),
+                 ('Execute Webhook', reverse('ico:admin-webhooks-execute',
                     request=request,
                     format=format)),
                  ('Company', reverse('ico:admin-company',
@@ -90,15 +93,32 @@ class DeactivateView(GenericAPIView):
         return Response({'status': 'success'})
 
 
-class AdminWebhookView(GenericAPIView):
+class AdminTransactionInitiateWebhookView(GenericAPIView):
     """
-    Receive a webhook event. Authenticates requests using a secret in the 
-    Authorization header.
+    Receive a initiate webhook event. Authenticates requests using a secret in 
+    the Authorization header.
     """
 
     allowed_methods = ('POST',)
     permission_classes = (AllowAny, )
-    serializer_class = AdminWebhookSerializer
+    serializer_class = AdminTransactionInitiateWebhookSerializer
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        instance = serializer.save()
+        return Response({'status': 'success'})
+
+
+class AdminTransactionExecuteWebhookView(GenericAPIView):
+    """
+    Receive a execute webhook event. Authenticates requests using a secret in 
+    the Authorization header.
+    """
+
+    allowed_methods = ('POST',)
+    permission_classes = (AllowAny, )
+    serializer_class = AdminTransactionExecuteWebhookSerializer
 
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)

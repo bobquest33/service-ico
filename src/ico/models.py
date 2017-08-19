@@ -5,6 +5,7 @@ from decimal import Decimal
 
 from django.db import models
 from django.utils.timezone import utc
+from django.db.models.functions import Coalesce
 
 from ico.enums import PurchaseStatus
 from ico.rates import get_crypto_rates, get_fiat_rates
@@ -108,8 +109,10 @@ class Ico(DateModel):
         raise Phase.DoesNotExist
 
     def get_token_amount_sold(self):
+        statuses = (PurchaseStatus.PENDING, PurchaseStatus.COMPLETE,)
+
         purchases = Purchase.objects.filter(quote__phase__ico=self, 
-            status=PurchaseStatus.COMPLETE).aggregate(
+            status__in=statuses).aggregate(
                 total_tokens=Coalesce(models.Sum('quotes__token_amount')))
 
         return purchases['total_tokens']
@@ -220,6 +223,6 @@ class Quote(DateModel):
 
 class Purchase(DateModel):
     quote = models.ForeignKey('ico.Quote')
-    desposit_tx = models.CharField(max_length=200, null=True)
-    token_tx = models.CharField(max_length=200, null=True)
+    desposit_tx = models.CharField(unique=True, max_length=200, null=True)
+    token_tx = models.CharField(unique=True, max_length=200, null=True)
     status = EnumField(PurchaseStatus, max_length=50)

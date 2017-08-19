@@ -8,7 +8,8 @@ urlpatterns = (
     url(r'^activate/$', views.ActivateView.as_view(), name='activate'),
     url(r'^deactivate/$', views.DeactivateView.as_view(), name='deactivate'),
 
-    url(r'^admin/webhook/$', views.AdminWebhookView.as_view(), name='admin-webhook'),
+    url(r'^admin/webhooks/initiate/$', views.AdminTransactionInitiateWebhookView.as_view(), name='admin-webhooks-initiate'),
+    url(r'^admin/webhooks/execute/$', views.AdminTransactionExecuteWebhookView.as_view(), name='admin-webhooks-execute'),
     url(r'^admin/company/$', views.AdminCompanyView.as_view(), name='admin-company'),
     url(r'^admin/currencies/$', views.AdminCurrencyList.as_view(), name='admin-currencies'),
     url(r'^admin/currencies/(?P<code>(\w+))/$', views.AdminCurrencyView.as_view(), name='admin-currencies-view'),
