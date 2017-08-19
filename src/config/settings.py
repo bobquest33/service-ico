@@ -170,6 +170,13 @@ FIXTURE_DIRS = ['config/fixtures']
 
 SITE_HEADER = 'Rehive'
 
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+        'LOCATION': 'ico_cache',
+    }
+}
+
 CACHE_DIR = os.path.join(PROJECT_DIR, 'var/cache')
 
 FORMAT_MODULE_PATH = 'config.formats'
