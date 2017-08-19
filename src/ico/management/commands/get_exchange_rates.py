@@ -17,4 +17,4 @@ class Command(BaseCommand):
             for currency in phase.ico.company.currency_set.all():
                 rate, _ = Rate.objects\
                     .get_or_create(phase=phase, currency=currency)
-                rate.calculate_rate()
+                rate.set_rate()

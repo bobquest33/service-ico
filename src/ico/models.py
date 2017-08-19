@@ -112,7 +112,7 @@ class Rate(DateModel):
     currency = models.ForeignKey('ico.Currency')
     rate = MoneyField(default=Decimal(0))
 
-    def calculate_rate(self):
+    def set_rate(self):
         """
         Calculate the rate based on the most recent rates data
         from the exchange. Calculations are done with relation to the
