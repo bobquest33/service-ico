@@ -178,17 +178,10 @@ class AdminTransactionInitiateWebhookSerializer(AdminWebhookSerializer):
         data = validated_data.get('data')
         tx_id = data.get('id')
         status =  data.get('status')
+        currency =  data.get('currency')
 
         # Instantiate Rehive SDK
         rehive = Rehive(company.admin.token) 
-
-        # Check if there is an enabled ICO and at least one phase.
-        try:
-            ico = Ico.objects.get(company=company, enabled=True)
-            phase = ico.get_phase()
-        except (Ico.DoesNotExist, Phase.DoesNotexist):
-            # Don't raise an error because Rehive webhook will keep retrying.
-            return validated_data
  
         # Check if the transaction is already associated to any purchases.
         try:
@@ -201,10 +194,19 @@ class AdminTransactionInitiateWebhookSerializer(AdminWebhookSerializer):
         except Purchase.DoesNotExist:
             pass 
 
-        # Get the deposit currency to check if it exists.
+        # Check if there is an enabled ICO and the ICO has at least one phase.
+        # Exclude ICOs that have the same currency code as the transaction.
+        try:
+            ico = Ico.objects.exclude(currency__code=currency['code']).get(
+                company=company, enabled=True)
+            phase = ico.get_phase()
+        except (Ico.DoesNotExist, Phase.DoesNotexist):
+            return validated_data
+
+        # Get a currency.
         try:
             deposit_currency = Currency.objects.get(
-                code__iexact=data['currency']['code'], company=company, 
+                code__iexact=currency['code'], company=company, 
                 enabled=True)  
         except Currency.DoesNotExist:
             raise serializers.ValidationError("Invalid currency.")   
@@ -250,10 +252,11 @@ class AdminTransactionInitiateWebhookSerializer(AdminWebhookSerializer):
 
         try: 
             # Create asscociated token credit transaction
-            token_tx = rehive.admin.transactions.credit(amount=token_amount, 
-                currency=quote.phase.ico.currency.code, confirm_on_create=False)
+            token_tx = rehive.admin.transactions.create_credit(
+                amount=token_amount, currency=quote.phase.ico.currency.code, 
+                confirm_on_create=False)
 
-            purchase.token_tx = token_tx
+            purchase.token_tx = token_tx['id']
             purchase.save()
         except APIException:
             # TODO: Handle API exception if there is an interruption of service.
@@ -287,6 +290,7 @@ class AdminTransactionExecuteWebhookSerializer(AdminWebhookSerializer):
         rehive = Rehive(company.admin.token) 
 
         # Check if the transaction is associated to any pending purchases.
+        # Ensure it is associated by only the deposit_tx.
         try:
             purchase = Purchase.objects.exclude(token_tx__isnull=True).get(
                 deposit_tx=tx_id,
@@ -295,7 +299,7 @@ class AdminTransactionExecuteWebhookSerializer(AdminWebhookSerializer):
         except Purchase.DoesNotExist:
             # Simply return immediately, this isn't a relevant transaction.
             # Don't raise an error otherwise Rehive webhook will keep retrying.
-            return
+            return validated_data
         
         # If error occurs, rollback changes and raise error so that Rehive
         # retries (most likeley an APIException).
@@ -305,7 +309,7 @@ class AdminTransactionExecuteWebhookSerializer(AdminWebhookSerializer):
             purchase.save()
 
             # Update associated Rehive transaction.
-            rehive.admin.transactions.get(id=purchase).update(status=status)
+            rehive.admin.transactions.patch(purchase.token_tx, status)
 
 
 class AdminCurrencySerializer(serializers.ModelSerializer):
