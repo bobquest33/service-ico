@@ -96,6 +96,24 @@ class Ico(DateModel):
     def __str__(self):
         return str(self.currency) + "_" + str(self.company)
 
+    def get_phase(self):
+        percent = (self.get_token_amount_sold() / self.number) * 100
+
+        for phase in Phase.objects.filter(ico=self).order_by('level'):
+            if percent < phase.percentage:
+                return phase
+            else:
+                percent = percent - phase_percentage
+
+        raise Phase.DoesNotExist
+
+    def get_token_amount_sold(self):
+        purchases = Purchase.objects.filter(quote__phase__ico=self, 
+            status=PurchaseStatus.COMPLETE).aggregate(
+                total_tokens=Coalesce(models.Sum('quotes__token_amount')))
+
+        return purchases['total_tokens']
+
 
 class Phase(DateModel):
     ico = models.ForeignKey('ico.Ico')

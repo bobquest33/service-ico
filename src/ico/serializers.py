@@ -323,6 +323,10 @@ class UserCreateQuoteSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Invalid currency.")
 
     def validate(self, validated_data):
+        user = self.context['request'].user
+        ico_id = self.context.get('view').kwargs.get('ico_id')
+
+        # Check that only one amount exists.
         deposit_amount = validated_data.get('deposit_amount')
         token_amount = validated_data.get('token_amount')
 
@@ -336,22 +340,47 @@ class UserCreateQuoteSerializer(serializers.ModelSerializer):
                 {"non_field_errors": 
                     ["only deposit amount or token amount must be inserted."]})
 
+        # Set a phase if one exists for the ICO, otherwise throw an error.
+        try:
+            ico = Ico.objects.get(company=user.company, id=ico_id)
+            validated_data['phase'] = ico.get_phase()
+        except (Ico.DoesNotExist, Phase.DoesNotexist):
+            raise exceptions.NotFound()
+
         return validated_data       
 
     def create(self, validated_data):
-        company = self.context.get('request').user.company
-        ico_id = self.context.get('view').kwargs.get('ico_id')
+        user = self.context['request'].user.company
 
-        try:
-            validated_data['ico'] = Ico.objects.get(company=company, id=ico_id)
-        except Ico.DoesNotExist:
-            raise exceptions.NotFound()
+        deposit_amount = validated_data.get('deposit_amount')
+        token_amount = validated_data.get('token_amount')
+        deposit_currency = validated_data.get('deposit_currency')
+        phase = validated_data.get('phase')
 
-        # ----------------------------------------------------------------------
-        # Do complex quote creation logic HERE
-        # ----------------------------------------------------------------------
+        # Primary Rate
+        rate = Rate.object.get(phase=phase, currency=deposit_currency)
 
-        return super(AdminPhaseSerializer, self).create(validated_data)
+        # If a deposit amount is submitted than a ICO token amount needs to be 
+        # calculated.
+        if deposit_amount and not token_amount:
+            token_amount = Decimal(deposit_amount * rate.rate)
+            
+        # If an ICO token amount is submitted than a deposit amount needs to be 
+        # calculated instead.
+        elif token_amount and not deposit_amount:
+            deposit_amount = Decimal(token_amount / rate.rate)
+
+        # Build quote object.
+        create_data.update({
+                "user": user,
+                "phase": phase,
+                "deposit_amount": deposit_amount,
+                "deposit_currency": deposit_currency,
+                "token_amount": token_amount,
+                "rate": rate,
+            })
+
+        return super(UserCreateQuoteSerializer, self).create(create_data)
 
 
 class UserQuoteSerializer(serializers.ModelSerializer):
@@ -360,7 +389,7 @@ class UserQuoteSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Quote
-        fields = ('user', 'phase', 'deposit_amount', 'deposit_currency', 
+        fields = ('phase', 'deposit_amount', 'deposit_currency', 
             'token_amount', 'rate',)
 
 
