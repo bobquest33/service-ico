@@ -459,11 +459,11 @@ class AdminRateSerializer(serializers.ModelSerializer):
 
 class AdminQuoteSerializer(serializers.ModelSerializer):
     user = serializers.CharField()
-    deposit_currency = serializers.CharField()
+    deposit_currency = AdminCurrencySerializer(read_only=True)
 
     class Meta:
         model = Quote
-        fields = ('user', 'phase', 'deposit_amount', 'deposit_currency',
+        fields = ('id', 'user', 'phase', 'deposit_amount', 'deposit_currency',
             'token_amount', 'rate',)
 
 
@@ -573,7 +573,7 @@ class UserCreateQuoteSerializer(serializers.ModelSerializer):
 
 
 class UserQuoteSerializer(serializers.ModelSerializer):
-    deposit_currency = serializers.CharField()
+    deposit_currency = AdminCurrencySerializer(read_only=True)
 
     class Meta:
         model = Quote

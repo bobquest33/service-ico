@@ -128,10 +128,20 @@ class Phase(DateModel):
         return str(self.level)
 
 
+class RateManager(models.Manager):
+    def get_queryset(self):
+        queryset = super(RateManager, self).get_querysset()
+        for rate in queryset:
+            rate.set_rate()
+        return queryset
+
+
 class Rate(DateModel):
     phase = models.ForeignKey('ico.Phase')
     currency = models.ForeignKey('ico.Currency')
     rate = MoneyField(default=Decimal(0))
+
+    objects = RateManager
 
     def set_rate(self):
         """
