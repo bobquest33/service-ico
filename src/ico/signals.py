@@ -13,6 +13,6 @@ def create_rate(sender, instance, created, **kwargs):
     if not created:
         return
 
-    for currency in instance.ico.currency_set.all():
+    for currency in instance.ico.company.currency_set.all():
         rate = Rate.objects.create(phase=instance, currency=currency)
         rate.set_rate()
