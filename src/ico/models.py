@@ -104,7 +104,7 @@ class Ico(DateModel):
             if percent < phase.percentage:
                 return phase
             else:
-                percent = percent - phase_percentage
+                percent = percent - phase.percentage
 
         raise Phase.DoesNotExist
 

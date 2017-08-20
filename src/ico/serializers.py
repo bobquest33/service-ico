@@ -200,7 +200,7 @@ class AdminTransactionInitiateWebhookSerializer(AdminWebhookSerializer):
             ico = Ico.objects.exclude(currency__code=currency['code']).get(
                 company=company, enabled=True)
             phase = ico.get_phase()
-        except (Ico.DoesNotExist, Phase.DoesNotexist):
+        except (Ico.DoesNotExist, Phase.DoesNotExist):
             return validated_data
 
         # Get a currency.
