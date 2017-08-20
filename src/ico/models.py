@@ -113,7 +113,7 @@ class Ico(DateModel):
 
         purchases = Purchase.objects.filter(quote__phase__ico=self, 
             status__in=statuses).aggregate(
-                total_tokens=Coalesce(models.Sum('quotes__token_amount')))
+                total_tokens=Coalesce(models.Sum('quote__token_amount'), 0))
 
         return purchases['total_tokens']
 
@@ -223,6 +223,6 @@ class Quote(DateModel):
 
 class Purchase(DateModel):
     quote = models.ForeignKey('ico.Quote')
-    desposit_tx = models.CharField(unique=True, max_length=200, null=True)
+    deposit_tx = models.CharField(unique=True, max_length=200, null=True)
     token_tx = models.CharField(unique=True, max_length=200, null=True)
     status = EnumField(PurchaseStatus, max_length=50)
