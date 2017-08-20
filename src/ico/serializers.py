@@ -157,23 +157,20 @@ class AdminTransactionInitiateWebhookSerializer(AdminWebhookSerializer):
     """
 
     def validate_event(self, event):
-        if event != WebhookEvent.TRANSACTION_INITIATE:
+        if event != WebhookEvent.TRANSACTION_INITIATE.value:
             raise serializers.ValidationError("Invalid event.")
         return event
 
     def validate_data(self, data):
-        statuses = (PurchaseStatus.PENDING,)
-
-        if data['status'] not in statuses:
+        if data['status'] != PurchaseStatus.PENDING.value:
             raise serializers.ValidationError("Invalid transaction status.")
+
+        if data['tx_type'] != "credit":
+            raise serializers.ValidationError("Invalid transaction type.")
+
         return data
 
     def create(self, validated_data):
-        """
-        This function sucks, too much stuff getting validated and not much error
-        handling.
-        """
-
         company = validated_data.get('company')
         data = validated_data.get('data')
         tx_id = data.get('id')
@@ -225,42 +222,45 @@ class AdminTransactionInitiateWebhookSerializer(AdminWebhookSerializer):
         # Check for matching quotes, if none exist, create one.
         try:
             date_from = datetime.datetime.now() - datetime.timedelta(minutes=10)
-            quote = Quote.objects.get(user=user, 
+            quote = Quote.objects.filter(user=user, 
                 deposit_amount=deposit_amount, 
-                deposit_currency=deposit_currency, phase=phase, 
-                created__let=date_from)
+                deposit_currency=deposit_currency, 
+                phase=phase, 
+                created__lt=date_from).latest('created')
 
         except Quote.DoesNotExist:
-            rate = Rate.object.get(phase=phase, currency=deposit_currency)
+            rate = Rate.objects.get(phase=phase, currency=deposit_currency)
             token_amount = Decimal(deposit_amount * rate.rate)
             quote = Quote.objects.create(user=user, 
                                          phase=phase,
                                          deposit_amount=deposit_amount, 
                                          deposit_currency=deposit_currency,
                                          token_amount=token_amount,
-                                         rate=rate)
+                                         rate=rate.rate)    
 
-        # Create ICO purchase
-        purchase = Purchase.objects.create(quote=quote, deposit_tx=tx_id,
-            status=status)
+        # If error occurs, rollback changes and raise error so that Rehive
+        # retries (most likeley an APIException).
+        with transaction.atomic():
+            # Create ICO purchase
+            purchase = Purchase.objects.create(quote=quote, deposit_tx=tx_id,
+                status=status)
 
-        # Get the integer amount of ICO tokens for posting to Rehive.
-        token_cent_amount = Decimal(str(token_amount))
-        token_divisibility = Decimal(
-            str(quote.phase.ico.currency.divisibility))
-        token_amount = to_cents(token_cent_amount, token_divisibility)     
+            # Get token amount in cents for Rehive
+            token_divisibility = Decimal(
+                str(quote.phase.ico.currency.divisibility))
+            token_cent_amount = to_cents(quote.token_amount, token_divisibility) 
 
-        try: 
             # Create asscociated token credit transaction
             token_tx = rehive.admin.transactions.create_credit(
-                amount=token_amount, currency=quote.phase.ico.currency.code, 
+                user=str(user.identifier),
+                amount=token_cent_amount, 
+                currency=quote.phase.ico.currency.code, 
                 confirm_on_create=False)
 
             purchase.token_tx = token_tx['id']
-            purchase.save()
-        except APIException:
-            # TODO: Handle API exception if there is an interruption of service.
-            pass         
+            purchase.save()    
+
+        return validated_data
 
 
 class AdminTransactionExecuteWebhookSerializer(AdminWebhookSerializer):
@@ -269,15 +269,20 @@ class AdminTransactionExecuteWebhookSerializer(AdminWebhookSerializer):
     """    
 
     def validate_event(self, event):
-        if event != WebhookEvent.TRANSACTION_EXECUTE:
+        if event != WebhookEvent.TRANSACTION_EXECUTE.value:
             raise serializers.ValidationError("Invalid event.")
         return event
 
     def validate_data(self, data):
-        statuses = (PurchaseStatus.FAILED, PurchaseStatus.COMPLETE,)
+        statuses = (PurchaseStatus.FAILED.value, 
+            PurchaseStatus.COMPLETE.value)
 
         if data['status'] not in statuses:
             raise serializers.ValidationError("Invalid transaction status.")
+
+        if data['tx_type'] != "credit":
+            raise serializers.ValidationError("Invalid transaction type.")
+
         return data
 
     def create(self, validated_data):
@@ -310,6 +315,8 @@ class AdminTransactionExecuteWebhookSerializer(AdminWebhookSerializer):
 
             # Update associated Rehive transaction.
             rehive.admin.transactions.patch(purchase.token_tx, status)
+
+        return validated_data
 
 
 class AdminCurrencySerializer(serializers.ModelSerializer):
@@ -381,6 +388,14 @@ class AdminCreateIcoSerializer(serializers.ModelSerializer):
 
         # TODO: Also create transaction webhooks. 
         # Use rehive sdk to create a initiate and execute webhook. 
+        #    1) event: transaction.execute
+        #       url: http://localhost:8000/api/admin/webhooks/execute/
+        #       tx_type: credit
+        #       secret: company.secret
+        #    2) event: transaction.initiate
+        #       url: http://localhost:8000/api/admin/webhooks/initiate/
+        #       tx_type: credit
+        #       secret: company.secret
 
         return Ico.objects.create(**validated_data)
 
@@ -429,6 +444,10 @@ class AdminPhaseSerializer(serializers.ModelSerializer):
 
         return super(AdminPhaseSerializer, self).create(validated_data)
 
+    def delete(self):
+        instance = self.instance
+        instance.delete()
+
 
 class AdminRateSerializer(serializers.ModelSerializer):
     currency = AdminCurrencySerializer(read_only=True)
@@ -450,10 +469,13 @@ class AdminQuoteSerializer(serializers.ModelSerializer):
 
 class AdminPurchaseSerializer(serializers.ModelSerializer):
     quote = serializers.IntegerField(source='quote.id')
+    phase = serializers.IntegerField(source='quote.phase.level')
+    status = serializers.ChoiceField(choices=PurchaseStatus.choices(),
+        source='status.value')
 
     class Meta:
         model = Purchase
-        fields = ('quote', 'phase', 'depost_tx', 'token_tx', 'status')
+        fields = ('quote', 'phase', 'deposit_tx', 'token_tx', 'status')
 
 
 class UserIcoSerializer(serializers.ModelSerializer):
@@ -518,7 +540,7 @@ class UserCreateQuoteSerializer(serializers.ModelSerializer):
         return validated_data       
 
     def create(self, validated_data):
-        user = self.context['request'].user.company
+        user = self.context['request'].user
 
         deposit_amount = validated_data.get('deposit_amount')
         token_amount = validated_data.get('token_amount')
@@ -526,7 +548,7 @@ class UserCreateQuoteSerializer(serializers.ModelSerializer):
         phase = validated_data.get('phase')
 
         # Deposit rate
-        rate = Rate.object.get(phase=phase, currency=deposit_currency)
+        rate = Rate.objects.get(phase=phase, currency=deposit_currency)
 
         # If a deposit amount is submitted than a ICO token amount needs to be 
         # calculated.
@@ -544,14 +566,13 @@ class UserCreateQuoteSerializer(serializers.ModelSerializer):
                 "deposit_amount": deposit_amount,
                 "deposit_currency": deposit_currency,
                 "token_amount": token_amount,
-                "rate": rate,
+                "rate": rate.rate,
             }
 
         return super(UserCreateQuoteSerializer, self).create(create_data)
 
 
 class UserQuoteSerializer(serializers.ModelSerializer):
-    user = serializers.CharField()
     deposit_currency = serializers.CharField()
 
     class Meta:
@@ -562,7 +583,10 @@ class UserQuoteSerializer(serializers.ModelSerializer):
 
 class UserPurchaseSerializer(serializers.ModelSerializer):
     quote = serializers.IntegerField(source='quote.id')
+    phase = serializers.IntegerField(source='quote.phase.level')
+    status = serializers.ChoiceField(choices=PurchaseStatus.choices(),
+        source='status.value')
 
     class Meta:
         model = Purchase
-        fields = ('quote', 'phase', 'depost_tx', 'token_tx', 'status')
+        fields = ('quote', 'phase', 'deposit_tx', 'token_tx', 'status')
