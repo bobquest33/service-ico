@@ -390,8 +390,8 @@ class AdminIcoSerializer(serializers.ModelSerializer):
     Serialize ico, update and delete.
     """
 
-    currency = serializers.CharField(read_only=True)
-    fiat_currency = serializers.CharField(read_only=True)
+    currency = AdminCurrencySerializer(read_only=True)
+    fiat_currency = AdminCurrencySerializer(read_only=True)
     
     class Meta:
         model = Ico
@@ -431,7 +431,7 @@ class AdminPhaseSerializer(serializers.ModelSerializer):
 
 
 class AdminRateSerializer(serializers.ModelSerializer):
-    currency = serializers.CharField()
+    currency = AdminCurrencySerializer(read_only=True)
 
     class Meta:
         model = Rate
@@ -461,8 +461,8 @@ class UserIcoSerializer(serializers.ModelSerializer):
     Serialize ico, update and delete.
     """
 
-    currency = serializers.CharField(read_only=True)
-    fiat_currency = serializers.CharField(read_only=True)
+    currency = AdminCurrencySerializer(read_only=True)
+    fiat_currency = AdminCurrencySerializer(read_only=True)
     
     class Meta:
         model = Ico
@@ -512,7 +512,7 @@ class UserCreateQuoteSerializer(serializers.ModelSerializer):
         try:
             ico = Ico.objects.get(company=user.company, id=ico_id)
             validated_data['phase'] = ico.get_phase()
-        except (Ico.DoesNotExist, Phase.DoesNotexist):
+        except (Ico.DoesNotExist, Phase.DoesNotExist):
             raise exceptions.NotFound()
 
         return validated_data       
