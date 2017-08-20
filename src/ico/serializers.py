@@ -407,13 +407,17 @@ class AdminIcoSerializer(serializers.ModelSerializer):
 
     currency = AdminCurrencySerializer(read_only=True)
     fiat_currency = AdminCurrencySerializer(read_only=True)
-    
+    fiat_goal_amount = serializers.SerializerMethodField()
+
     class Meta:
         model = Ico
-        fields = ('id', 'currency', 'number', 'exchange_provider', 'fiat_currency', 
+        fields = ('id', 'currency', 'number', 'exchange_provider', 'fiat_currency',
             'fiat_goal_amount', 'enabled')
-        read_only_field = ('id', 'currency', 'number', 'fiat_currency', 
+        read_only_field = ('id', 'currency', 'number', 'fiat_currency',
             'fiat_goal_amount',)
+
+    def get_fiat_goal_amount(self, obj):
+        return to_cents(obj.fiat_goal_amount, obj.fiat_currency.divisibility)
 
     def update(self, instance, validated_data):
         for key, value in validated_data.items():
@@ -428,10 +432,14 @@ class AdminIcoSerializer(serializers.ModelSerializer):
 
 
 class AdminPhaseSerializer(serializers.ModelSerializer):
+    fiat_rate = serializers.SerializerMethodField()
 
     class Meta:
         model = Phase
         fields = ('id', 'level', 'percentage', 'fiat_rate',)
+
+    def get_fiat_rate(self, obj):
+        return to_cents(obj.fiat_rate, obj.ico.fiat_currency.divisibility)
 
     def create(self, validated_data):
         company = self.context.get('request').user.company
@@ -451,20 +459,36 @@ class AdminPhaseSerializer(serializers.ModelSerializer):
 
 class AdminRateSerializer(serializers.ModelSerializer):
     currency = AdminCurrencySerializer(read_only=True)
+    rate = serializers.SerializerMethodField()
 
     class Meta:
         model = Rate
         fields = ('currency', 'rate')
 
+    def get_rate(self, obj):
+        return to_cents(obj.rate, obj.currency.divisibility)
+
 
 class AdminQuoteSerializer(serializers.ModelSerializer):
     user = serializers.CharField()
     deposit_currency = AdminCurrencySerializer(read_only=True)
+    deposit_amount = serializers.SerializerMethodField()
+    token_amount = serializers.SerializerMethodField()
+    rate = serializers.SerializerMethodField()
 
     class Meta:
         model = Quote
         fields = ('id', 'user', 'phase', 'deposit_amount', 'deposit_currency',
             'token_amount', 'rate',)
+
+    def get_deposit_amount(self, obj):
+        return to_cents(obj.deposit_amount, obj.deposit_currency.divisibility)
+
+    def get_token_amount(self, obj):
+        return to_cents(obj.token_amount, obj.deposit_currency.divisibility)
+
+    def get_rate(self, obj):
+        return to_cents(obj.rate, obj.deposit_currency.divisibility)
 
 
 class AdminPurchaseSerializer(serializers.ModelSerializer):
@@ -485,11 +509,15 @@ class UserIcoSerializer(serializers.ModelSerializer):
 
     currency = AdminCurrencySerializer(read_only=True)
     fiat_currency = AdminCurrencySerializer(read_only=True)
+    fiat_goal_amount = serializers.SerializerMethodField()
     
     class Meta:
         model = Ico
         fields = ('id', 'currency', 'number', 'exchange_provider', 'fiat_currency', 
             'fiat_goal_amount', 'enabled')
+
+    def get_fiat_goal_amount(self, obj):
+        return to_cents(obj.fiat_goal_amount, obj.fiat_currency.divisibility)
 
 
 class UserCreateQuoteSerializer(serializers.ModelSerializer):
@@ -574,11 +602,23 @@ class UserCreateQuoteSerializer(serializers.ModelSerializer):
 
 class UserQuoteSerializer(serializers.ModelSerializer):
     deposit_currency = AdminCurrencySerializer(read_only=True)
+    deposit_amount = serializers.SerializerMethodField()
+    token_amount = serializers.SerializerMethodField()
+    rate = serializers.SerializerMethodField()
 
     class Meta:
         model = Quote
-        fields = ('phase', 'deposit_amount', 'deposit_currency', 
+        fields = ('id', 'phase', 'deposit_amount', 'deposit_currency', 
             'token_amount', 'rate',)
+
+    def get_deposit_amount(self, obj):
+        return to_cents(obj.deposit_amount, obj.deposit_currency.divisibility)
+
+    def get_token_amount(self, obj):
+        return to_cents(obj.token_amount, obj.deposit_currency.divisibility)
+
+    def get_rate(self, obj):
+        return to_cents(obj.rate, obj.deposit_currency.divisibility)
 
 
 class UserPurchaseSerializer(serializers.ModelSerializer):
@@ -589,4 +629,4 @@ class UserPurchaseSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Purchase
-        fields = ('quote', 'phase', 'deposit_tx', 'token_tx', 'status')
+        fields = ('id', 'quote', 'phase', 'deposit_tx', 'token_tx', 'status')
