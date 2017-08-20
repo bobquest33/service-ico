@@ -4,6 +4,7 @@ IMAGE: gcr.io/rehive-services/ico-service-staging
 HOST_NAME: rehive-build-server # not required for k8s-only setup
 BASE_IMAGE: gcr.io/rehive-services/ico-service-base
 VIRTUAL_HOST: ico.s.services.rehive.io
+VENV_PYTHON: ~/.conda/envs/ico-service/bin/python
 ENV_FILE: .staging.env
 GCLOUD_STATIC_BUCKET: ico-service-static
 CLUSTER: staging
