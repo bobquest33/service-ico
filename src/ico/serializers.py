@@ -364,7 +364,7 @@ class AdminCreateIcoSerializer(serializers.ModelSerializer):
         model = Ico
         fields = ('currency', 'number', 'exchange_provider', 'fiat_currency', 
             'fiat_goal_amount', 'enabled')
-        
+
     def validate_currency(self, currency):
         company = self.context['request'].user.company
 
@@ -385,6 +385,9 @@ class AdminCreateIcoSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data['company'] = self.context['request'].user.company
+        validated_data['fiat_goal_amount'] = from_cents(
+            amount=validated_data['fiat_goal_amount'],
+            divisibility=validated_data['fiat_currency'].divisibility)
 
         # TODO: Also create transaction webhooks. 
         # Use rehive sdk to create a initiate and execute webhook. 
@@ -510,10 +513,10 @@ class UserIcoSerializer(serializers.ModelSerializer):
     currency = AdminCurrencySerializer(read_only=True)
     fiat_currency = AdminCurrencySerializer(read_only=True)
     fiat_goal_amount = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = Ico
-        fields = ('id', 'currency', 'number', 'exchange_provider', 'fiat_currency', 
+        fields = ('id', 'currency', 'number', 'exchange_provider', 'fiat_currency',
             'fiat_goal_amount', 'enabled')
 
     def get_fiat_goal_amount(self, obj):
@@ -588,14 +591,17 @@ class UserCreateQuoteSerializer(serializers.ModelSerializer):
         elif token_amount and not deposit_amount:
             deposit_amount = Decimal(token_amount / rate.rate)
 
+        deposit_amount = from_cents(deposit_amount, deposit_currency.divisibility)
+        token_amount = from_cents(token_amount, deposit_currency.divisibility)
+
         create_data = {
-                "user": user,
-                "phase": phase,
-                "deposit_amount": deposit_amount,
-                "deposit_currency": deposit_currency,
-                "token_amount": token_amount,
-                "rate": rate.rate,
-            }
+            "user": user,
+            "phase": phase,
+            "deposit_amount": deposit_amount,
+            "deposit_currency": deposit_currency,
+            "token_amount": token_amount,
+            "rate": rate.rate,
+        }
 
         return super(UserCreateQuoteSerializer, self).create(create_data)
 
