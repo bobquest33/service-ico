@@ -1,4 +1,4 @@
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, post_init
 from django.dispatch import receiver
 
 from ico.models import Phase, Rate
@@ -16,3 +16,11 @@ def create_rate(sender, instance, created, **kwargs):
     for currency in instance.ico.company.currency_set.all():
         rate = Rate.objects.create(phase=instance, currency=currency)
         rate.set_rate()
+
+
+@receiver(post_init, sender=Rate)
+def auto_update_rate(sender, instance, **kwargs):
+    """
+    Automatically check and update the rate on the instance
+    """
+    instance.set_rate()

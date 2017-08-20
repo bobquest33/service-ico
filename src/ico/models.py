@@ -152,10 +152,6 @@ class Rate(DateModel):
             Backward: BTCETH
         """
 
-        # Get the updated rates from the exchange or caches
-        crypto_rates = get_crypto_rates()
-        fiat_rates = get_fiat_rates()
-
         # The ICO currency is worth one of itself
         if self.currency == self.phase.ico.currency:
             self.rate = 1
@@ -165,13 +161,16 @@ class Rate(DateModel):
             self.rate = self.phase.fiat_rate
 
         else:
+            # Get the updated rates from the exchange or caches
+            crypto_rates = get_crypto_rates()
+            fiat_rates = get_fiat_rates()
             currency_code = self.currency.code
 
             # The exchange lists bitcoin as BTC not XBT
             if self.currency.code == 'XBT':
                 currency_code = 'BTC'
 
-            if currency_code in fiat_rates.keys():
+            try:
                 fiat_rate = Decimal(fiat_rates[currency_code]['rate'])
 
                 if self.phase.ico.currency.code == 'USD':
@@ -182,6 +181,8 @@ class Rate(DateModel):
                     # Inverse calculation to get the rate with
                     # relation to USD.
                     self.rate = (1 / fiat_rate) * self.phase.fiat_rate
+            except KeyError:
+                pass
 
             else:
                 ico_fiat_currency_code = self.phase.ico.fiat_currency.code
@@ -196,18 +197,25 @@ class Rate(DateModel):
                 # in one "direction"
                 symbol = currency_code + ico_fiat_currency_code
                 reverse_symbol = ico_fiat_currency_code + currency_code
+                check_reverse = False
 
-                if symbol in crypto_rates.keys():
+                try:
                     # "Forward" checking of the rates symbol. If it
                     # matches do the normal rate calculation
-                    crypto_rate = crypto_rates[symbol]['last']
+                    crypto_rate = Decimal(crypto_rates[symbol]['last'])
                     self.rate = crypto_rate * self.phase.fiat_rate
+                except KeyError:
+                    check_reverse = True
 
-                elif reverse_symbol in crypto_rates.keys():
-                    # "Backwards" checking on the rates symbol. If it
-                    # matches do the inverse rate calculation
-                    crypto_rate = crypto_rates[reverse_symbol]['last']
-                    self.rate = (1 / crypto_rate) * self.phase.fiat_rate
+                if check_reverse:
+                    try:
+                        # "Backwards" checking on the rates symbol. If it
+                        # matches do the inverse rate calculation
+                        crypto_rate = Decimal(crypto_rates[reverse_symbol]['last'])
+                        self.rate = (1 / crypto_rate) * self.phase.fiat_rate
+                    except KeyError:
+                        # TODO: Call CONVERT api endpoint
+                        pass
 
         self.save()
 
