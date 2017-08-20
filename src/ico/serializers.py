@@ -166,6 +166,10 @@ class AdminTransactionInitiateWebhookSerializer(AdminWebhookSerializer):
 
         if data['status'] not in statuses:
             raise serializers.ValidationError("Invalid transaction status.")
+
+        if data['tx_type'] != "credit":
+            raise serializers.ValidationError("Invalid transaction type.")
+
         return data
 
     def create(self, validated_data):
@@ -238,29 +242,28 @@ class AdminTransactionInitiateWebhookSerializer(AdminWebhookSerializer):
                                          deposit_amount=deposit_amount, 
                                          deposit_currency=deposit_currency,
                                          token_amount=token_amount,
-                                         rate=rate)
+                                         rate=rate)    
 
-        # Create ICO purchase
-        purchase = Purchase.objects.create(quote=quote, deposit_tx=tx_id,
-            status=status)
+        # If error occurs, rollback changes and raise error so that Rehive
+        # retries (most likeley an APIException).
+        with transaction.atomic():
+            # Create ICO purchase
+            purchase = Purchase.objects.create(quote=quote, deposit_tx=tx_id,
+                status=status)
 
-        # Get the integer amount of ICO tokens for posting to Rehive.
-        token_cent_amount = Decimal(str(token_amount))
-        token_divisibility = Decimal(
-            str(quote.phase.ico.currency.divisibility))
-        token_amount = to_cents(token_cent_amount, token_divisibility)     
+            # Get token amount in cents for Rehive
+            token_divisibility = Decimal(
+                str(quote.phase.ico.currency.divisibility))
+            token_cent_amount = to_cents(quote.token_amount, token_divisibility) 
 
-        try: 
             # Create asscociated token credit transaction
             token_tx = rehive.admin.transactions.create_credit(
-                amount=token_amount, currency=quote.phase.ico.currency.code, 
+                amount=token_cent_amount, 
+                currency=quote.phase.ico.currency.code, 
                 confirm_on_create=False)
 
             purchase.token_tx = token_tx['id']
-            purchase.save()
-        except APIException:
-            # TODO: Handle API exception if there is an interruption of service.
-            pass         
+            purchase.save()    
 
 
 class AdminTransactionExecuteWebhookSerializer(AdminWebhookSerializer):
@@ -278,6 +281,10 @@ class AdminTransactionExecuteWebhookSerializer(AdminWebhookSerializer):
 
         if data['status'] not in statuses:
             raise serializers.ValidationError("Invalid transaction status.")
+
+        if data['tx_type'] != "credit":
+            raise serializers.ValidationError("Invalid transaction type.")
+
         return data
 
     def create(self, validated_data):
@@ -381,6 +388,14 @@ class AdminCreateIcoSerializer(serializers.ModelSerializer):
 
         # TODO: Also create transaction webhooks. 
         # Use rehive sdk to create a initiate and execute webhook. 
+        #    1) event: transaction.execute
+        #       url: http://localhost:8000/api/admin/webhooks/execute/
+        #       tx_type: credit
+        #       secret: company.secret
+        #    2) event: transaction.initiate
+        #       url: http://localhost:8000/api/admin/webhooks/initiate/
+        #       tx_type: credit
+        #       secret: company.secret
 
         return Ico.objects.create(**validated_data)
 
