@@ -20,6 +20,23 @@ from logging import getLogger
 logger = getLogger('django')
 
 
+class DatesMixin(serializers.Serializer):
+    """
+    Adds created and updated timestamps to the serializer output.
+    Just add 'created' and 'updated' to Meta.fields if it is defined
+    """
+    created = serializers.SerializerMethodField(read_only=True)
+    updated = serializers.SerializerMethodField(read_only=True)
+
+    @staticmethod
+    def get_created(transaction):
+        return int(transaction.created.timestamp() * 1000)
+
+    @staticmethod
+    def get_updated(transaction):
+        return int(transaction.updated.timestamp() * 1000)
+
+
 class ActivateSerializer(serializers.Serializer):
     """
     Serialize the activation data, should be a token that represents an admin
@@ -403,7 +420,7 @@ class AdminCreateIcoSerializer(serializers.ModelSerializer):
         return Ico.objects.create(**validated_data)
 
 
-class AdminIcoSerializer(serializers.ModelSerializer):
+class AdminIcoSerializer(serializers.ModelSerializer, DatesMixin):
     """
     Serialize ico, update and delete.
     """
@@ -415,9 +432,9 @@ class AdminIcoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Ico
         fields = ('id', 'currency', 'number', 'exchange_provider', 'fiat_currency',
-            'fiat_goal_amount', 'enabled')
+            'fiat_goal_amount', 'enabled', 'created', 'updated')
         read_only_field = ('id', 'currency', 'number', 'fiat_currency',
-            'fiat_goal_amount',)
+            'fiat_goal_amount', 'created', 'updated')
 
     def get_fiat_goal_amount(self, obj):
         return to_cents(obj.fiat_goal_amount, obj.fiat_currency.divisibility)
@@ -467,19 +484,19 @@ class AdminCreatePhaseSerializer(serializers.ModelSerializer):
         return super(AdminCreatePhaseSerializer, self).create(validated_data)
 
 
-class AdminRateSerializer(serializers.ModelSerializer):
+class AdminRateSerializer(serializers.ModelSerializer, DatesMixin):
     currency = AdminCurrencySerializer(read_only=True)
     rate = serializers.SerializerMethodField()
 
     class Meta:
         model = Rate
-        fields = ('id', 'currency', 'rate')
+        fields = ('id', 'currency', 'rate', 'created', 'updated')
 
     def get_rate(self, obj):
         return to_cents(obj.rate, obj.currency.divisibility)
 
 
-class AdminQuoteSerializer(serializers.ModelSerializer):
+class AdminQuoteSerializer(serializers.ModelSerializer, DatesMixin):
     user = serializers.CharField()
     deposit_currency = AdminCurrencySerializer(read_only=True)
     deposit_amount = serializers.SerializerMethodField()
@@ -489,7 +506,7 @@ class AdminQuoteSerializer(serializers.ModelSerializer):
     class Meta:
         model = Quote
         fields = ('id', 'user', 'phase', 'deposit_amount', 'deposit_currency',
-            'token_amount', 'rate',)
+            'token_amount', 'rate', 'created', 'updated')
 
     def get_deposit_amount(self, obj):
         return to_cents(obj.deposit_amount, obj.deposit_currency.divisibility)
@@ -501,7 +518,7 @@ class AdminQuoteSerializer(serializers.ModelSerializer):
         return to_cents(obj.rate, obj.deposit_currency.divisibility)
 
 
-class AdminPurchaseSerializer(serializers.ModelSerializer):
+class AdminPurchaseSerializer(serializers.ModelSerializer, DatesMixin):
     quote = serializers.IntegerField(source='quote.id')
     phase = serializers.IntegerField(source='quote.phase.level')
     status = serializers.ChoiceField(choices=PurchaseStatus.choices(),
@@ -509,7 +526,8 @@ class AdminPurchaseSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Purchase
-        fields = ('quote', 'phase', 'deposit_tx', 'token_tx', 'status')
+        fields = ('quote', 'phase', 'deposit_tx', 'token_tx', 'status',
+                  'created', 'updated')
 
 
 class UserIcoSerializer(serializers.ModelSerializer):
@@ -613,7 +631,7 @@ class UserCreateQuoteSerializer(serializers.ModelSerializer):
         return super(UserCreateQuoteSerializer, self).create(create_data)
 
 
-class UserQuoteSerializer(serializers.ModelSerializer):
+class UserQuoteSerializer(serializers.ModelSerializer, DatesMixin):
     deposit_currency = AdminCurrencySerializer(read_only=True)
     deposit_amount = serializers.SerializerMethodField()
     token_amount = serializers.SerializerMethodField()
@@ -622,7 +640,7 @@ class UserQuoteSerializer(serializers.ModelSerializer):
     class Meta:
         model = Quote
         fields = ('id', 'phase', 'deposit_amount', 'deposit_currency', 
-            'token_amount', 'rate',)
+            'token_amount', 'rate', 'created', 'updated')
 
     def get_deposit_amount(self, obj):
         return to_cents(obj.deposit_amount, obj.deposit_currency.divisibility)
@@ -634,7 +652,7 @@ class UserQuoteSerializer(serializers.ModelSerializer):
         return to_cents(obj.rate, obj.deposit_currency.divisibility)
 
 
-class UserPurchaseSerializer(serializers.ModelSerializer):
+class UserPurchaseSerializer(serializers.ModelSerializer, DatesMixin):
     quote = serializers.IntegerField(source='quote.id')
     phase = serializers.IntegerField(source='quote.phase.level')
     status = serializers.ChoiceField(choices=PurchaseStatus.choices(),
@@ -642,4 +660,5 @@ class UserPurchaseSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Purchase
-        fields = ('id', 'quote', 'phase', 'deposit_tx', 'token_tx', 'status')
+        fields = ('id', 'quote', 'phase', 'deposit_tx', 'token_tx', 'status',
+                  'created', 'updated')
