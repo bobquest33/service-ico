@@ -608,13 +608,12 @@ class UserQuoteView(GenericAPIView):
     authentication_classes = (UserAuthentication,)
 
     def get(self, request, *args, **kwargs):
-        user = user.company
         ico_id = kwargs['ico_id']
         quote_id = kwargs['quote_id']
 
         try:
             quote = Quote.objects.get(id=quote_id, phase__ico_id=ico_id, 
-                phase__user=user)
+                user=request.user)
         except Quote.DoesNotExist:
             raise exceptions.NotFound()
 
