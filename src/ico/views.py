@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from rest_framework.reverse import reverse
 from rest_framework.views import APIView
 from rest_framework import exceptions
+from rest_framework.pagination import PageNumberPagination
 
 from ico.models import *
 from ico.serializers import *
@@ -58,6 +59,49 @@ def root(request, format=None):
                 ]
             )},
     ])
+
+
+class ResultsSetPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 250
+
+    def get_paginated_response(self, data):
+        response = OrderedDict([
+            ('count', self.page.paginator.count),
+            ('next', self.get_next_link()),
+            ('previous', self.get_previous_link()),
+            ('results', data)
+        ])
+
+        return Response(OrderedDict([('status', 'success'), ('data', response)]))
+
+
+class ListModelMixin(object):
+    """
+    List a queryset.
+    """
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({'status': 'success', 'data': serializer.data})
+
+
+class ListAPIView(ListModelMixin,
+                  GenericAPIView):
+    """
+    Concrete view for listing a queryset.
+    """
+
+    def get(self, request, *args, **kwargs):
+        return self.list(request, *args, **kwargs)
 
 
 class ActivateView(GenericAPIView):
@@ -150,20 +194,19 @@ class AdminCompanyView(GenericAPIView):
         return Response({'status': 'success', 'data': serializer.data})
 
 
-class AdminCurrencyList(GenericAPIView):
+class AdminCurrencyList(ListAPIView):
     """
     List and create ICOs.
     """
 
     allowed_methods = ('GET',)
+    pagination_class = ResultsSetPagination
     serializer_class = AdminCurrencySerializer
     authentication_classes = (AdminAuthentication,)
 
-    def get(self, request, *args, **kwargs):
-        company = request.user.company
-        queryset = Currency.objects.filter(company=company)
-        serializer = self.get_serializer(queryset, many=True)
-        return Response({'status': 'success', 'data': serializer.data})
+    def get_queryset(self):
+        company = self.request.user.company
+        return Currency.objects.filter(company=company)
 
     # Need to be able to refresh enabled currencies.
     # This should disable currencies that are no longer enabled.
@@ -193,12 +236,13 @@ class AdminCurrencyView(GenericAPIView):
         return Response({'status': 'success', 'data': serializer.data})
 
 
-class AdminIcoList(GenericAPIView):
+class AdminIcoList(ListAPIView):
     """
     List and create ICOs.
     """
 
     allowed_methods = ('GET', 'POST',)
+    pagination_class = ResultsSetPagination
     serializer_class = AdminIcoSerializer
     authentication_classes = (AdminAuthentication,)
 
@@ -207,11 +251,9 @@ class AdminIcoList(GenericAPIView):
             return AdminCreateIcoSerializer
         return super(AdminIcoList, self).get_serializer_class()
 
-    def get(self, request, *args, **kwargs):
-        company = request.user.company
-        queryset = Ico.objects.filter(company=company)
-        serializer = self.get_serializer(queryset, many=True)
-        return Response({'status': 'success', 'data': serializer.data})
+    def get_queryset(self):
+        company = self.request.user.company
+        return Ico.objects.filter(company=company)
 
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -271,27 +313,31 @@ class AdminIcoView(GenericAPIView):
         return Response({'status': 'success'})
 
 
-class AdminPhaseList(GenericAPIView):
+class AdminPhaseList(ListAPIView):
     """
     List and create phases.
     """
 
     allowed_methods = ('GET', 'POST',)
+    pagination_class = ResultsSetPagination
     serializer_class = AdminPhaseSerializer
     authentication_classes = (AdminAuthentication,)
 
-    def get(self, request, *args, **kwargs):
-        company = request.user.company
-        ico_id = kwargs['ico_id']
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return AdminCreatePhaseSerializer
+        return super(AdminPhaseList, self).get_serializer_class()
+
+    def get_queryset(self):
+        company = self.request.user.company
+        ico_id = self.kwargs['ico_id']
 
         try:
             ico = Ico.objects.get(company=company, id=ico_id)
         except Ico.DoesNotExist:
             raise exceptions.NotFound()
 
-        queryset = Phase.objects.filter(ico=ico)
-        serializer = self.get_serializer(queryset, many=True)
-        return Response({'status': 'success', 'data': serializer.data})
+        return Phase.objects.filter(ico=ico)
 
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -339,19 +385,20 @@ class AdminPhaseView(GenericAPIView):
         return Response({'status': 'success'})
 
 
-class AdminRateList(GenericAPIView):
+class AdminRateList(ListAPIView):
     """
     List and create rates.
     """
 
     allowed_methods = ('GET',)
+    pagination_class = ResultsSetPagination
     serializer_class = AdminRateSerializer
     authentication_classes = (AdminAuthentication,)
 
-    def get(self, request, *args, **kwargs):
-        company = request.user.company
-        ico_id = kwargs['ico_id']
-        phase_id = kwargs['phase_id']
+    def get_queryset(self):
+        company = self.request.user.company
+        ico_id = self.kwargs['ico_id']
+        phase_id = self.kwargs['phase_id']
 
         try:
             phase = Phase.objects.get(id=phase_id, ico_id=ico_id,
@@ -359,9 +406,7 @@ class AdminRateList(GenericAPIView):
         except Phase.DoesNotExist:
             raise exceptions.NotFound()
 
-        queryset = Rate.objects.filter(phase=phase)
-        serializer = self.get_serializer(queryset, many=True)
-        return Response({'status': 'success', 'data': serializer.data})
+        return Rate.objects.filter(phase=phase)
 
 
 class AdminRateView(GenericAPIView):
@@ -389,27 +434,26 @@ class AdminRateView(GenericAPIView):
         return Response({'status': 'success', 'data': serializer.data})
 
 
-class AdminQuoteList(GenericAPIView):
+class AdminQuoteList(ListAPIView):
     """
     List and create quotes.
     """
 
     allowed_methods = ('GET',)
+    pagination_class = ResultsSetPagination
     serializer_class = AdminQuoteSerializer
     authentication_classes = (AdminAuthentication,)
 
-    def get(self, request, *args, **kwargs):
-        company = request.user.company
-        ico_id = kwargs['ico_id']
+    def get_queryset(self):
+        company = self.request.user.company
+        ico_id = self.kwargs['ico_id']
 
         try:
             ico = Ico.objects.get(company=company, id=ico_id)
         except Ico.DoesNotExist:
             raise exceptions.NotFound()
 
-        queryset = Quote.objects.filter(phase__ico=ico)
-        serializer = self.get_serializer(queryset, many=True)
-        return Response({'status': 'success', 'data': serializer.data})
+        return Quote.objects.filter(phase__ico=ico)
 
 
 class AdminQuoteView(GenericAPIView):
@@ -436,27 +480,26 @@ class AdminQuoteView(GenericAPIView):
         return Response({'status': 'success', 'data': serializer.data})
 
 
-class AdminPurchaseList(GenericAPIView):
+class AdminPurchaseList(ListAPIView):
     """
     List and create purchases.
     """
 
     allowed_methods = ('GET',)
+    pagination_class = ResultsSetPagination
     serializer_class = AdminPurchaseSerializer
     authentication_classes = (AdminAuthentication,)
 
-    def get(self, request, *args, **kwargs):
-        company = request.user.company
-        ico_id = kwargs['ico_id']
+    def get_queryset(self):
+        company = self.request.user.company
+        ico_id = self.kwargs['ico_id']
 
         try:
             ico = Ico.objects.get(company=company, id=ico_id)
         except Ico.DoesNotExist:
             raise exceptions.NotFound()
 
-        queryset = Purchase.objects.filter(quote__phase__ico=ico)
-        serializer = self.get_serializer(queryset, many=True)
-        return Response({'status': 'success', 'data': serializer.data})
+        return Purchase.objects.filter(quote__phase__ico=ico)
 
 
 class AdminPurchaseView(GenericAPIView):
@@ -483,20 +526,19 @@ class AdminPurchaseView(GenericAPIView):
         return Response({'status': 'success', 'data': serializer.data})
 
 
-class UserIcoList(GenericAPIView):
+class UserIcoList(ListAPIView):
     """
     List and create ICOs.
     """
 
     allowed_methods = ('GET',)
+    pagination_class = ResultsSetPagination
     serializer_class = UserIcoSerializer
     authentication_classes = (UserAuthentication,)
 
-    def get(self, request, *args, **kwargs):
-        company = request.user.company
-        queryset = Ico.objects.filter(company=company)
-        serializer = self.get_serializer(queryset, many=True)
-        return Response({'status': 'success', 'data': serializer.data})
+    def get_queryset(self):
+        company = self.request.user.company
+        return Ico.objects.filter(company=company)
 
 
 class UserIcoView(GenericAPIView):
@@ -521,12 +563,13 @@ class UserIcoView(GenericAPIView):
         return Response({'status': 'success', 'data': serializer.data})
 
 
-class UserQuoteList(GenericAPIView):
+class UserQuoteList(ListAPIView):
     """
     List and create quotes.
     """
 
     allowed_methods = ('GET', 'POST',)
+    pagination_class = ResultsSetPagination
     serializer_class = UserQuoteSerializer
     authentication_classes = (UserAuthentication,)
 
@@ -535,18 +578,16 @@ class UserQuoteList(GenericAPIView):
             return UserCreateQuoteSerializer
         return super(UserQuoteList, self).get_serializer_class()
 
-    def get(self, request, *args, **kwargs):
-        user = request.user
-        ico_id = kwargs['ico_id']
+    def get_queryset(self):
+        user = self.request.user
+        ico_id = self.kwargs['ico_id']
 
         try:
             ico = Ico.objects.get(company=user.company, id=ico_id)
         except Ico.DoesNotExist:
             raise exceptions.NotFound()
 
-        queryset = Quote.objects.filter(user=user, phase__ico=ico)
-        serializer = self.get_serializer(queryset, many=True)
-        return Response({'status': 'success', 'data': serializer.data})
+        return Quote.objects.filter(user=user, phase__ico=ico)
 
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -581,28 +622,26 @@ class UserQuoteView(GenericAPIView):
         return Response({'status': 'success', 'data': serializer.data})
 
 
-class UserPurchaseList(GenericAPIView):
+class UserPurchaseList(ListAPIView):
     """
     List and create purchases.
     """
 
     allowed_methods = ('GET',)
+    pagination_class = ResultsSetPagination
     serializer_class = UserPurchaseSerializer
     authentication_classes = (UserAuthentication,)
 
-    def get(self, request, *args, **kwargs):
-        user = request.user
-        ico_id = kwargs['ico_id']
+    def get_queryset(self):
+        user = self.request.user
+        ico_id = self.kwargs['ico_id']
 
         try:
             ico = Ico.objects.get(company=user.company, id=ico_id)
         except Ico.DoesNotExist:
             raise exceptions.NotFound()
 
-        queryset = Purchase.objects.filter(quote__user=user, 
-            quote__phase__ico=ico)
-        serializer = self.get_serializer(queryset, many=True)
-        return Response({'status': 'success', 'data': serializer.data})
+        return Purchase.objects.filter(quote__user=user, quote__phase__ico=ico)
 
 
 class UserPurchaseView(GenericAPIView):
