@@ -453,6 +453,7 @@ class AdminIcoSerializer(serializers.ModelSerializer, DatesMixin):
 
 class AdminPhaseSerializer(serializers.ModelSerializer):
     fiat_rate = serializers.SerializerMethodField()
+    level = serializers.IntegerField(min_value=1, max_value=7)
 
     class Meta:
         model = Phase
@@ -461,26 +462,47 @@ class AdminPhaseSerializer(serializers.ModelSerializer):
     def get_fiat_rate(self, obj):
         return to_cents(obj.fiat_rate, obj.ico.fiat_currency.divisibility)
 
+    def update(self, instance, validated_data):
+        for key, value in validated_data.items():
+            setattr(instance, key, value)
+
+        instance.save()
+        return instance
+
     def delete(self):
         instance = self.instance
         instance.delete()
 
 
 class AdminCreatePhaseSerializer(serializers.ModelSerializer):
+    level = serializers.IntegerField(min_value=1, max_value=7)
+    percentage = serializers.IntegerField(min_value=1, max_value=100)
 
     class Meta:
         model = Phase
         fields = ('level', 'percentage', 'fiat_rate',)
 
-    def create(self, validated_data):
-        company = self.context.get('request').user.company
+    def validate(self, validated_data):
+        company = self.context['request'].user.company
         ico_id = self.context.get('view').kwargs.get('ico_id')
 
         try:
-            validated_data['ico'] = Ico.objects.get(company=company, id=ico_id)
+            ico = Ico.objects.get(company=company, id=ico_id)
         except Ico.DoesNotExist:
             raise exceptions.NotFound()
 
+        if (Phase.objects.filter(ico=ico).aggregate(
+                total=Coalesce(models.Sum('percentage'), 0))['total'] 
+                >= 100):
+            raise serializers.ValidationError(
+                {"non_field_errors": 
+                    ["Cannoy have a higher total phase percentage than 100."]})
+
+        validated_data['ico'] = ico
+
+        return validated_data
+
+    def create(self, validated_data):
         validated_data['fiat_rate'] = from_cents(
             amount=validated_data['fiat_rate'],
             divisibility=validated_data['ico'].fiat_currency.divisibility)
@@ -590,12 +612,20 @@ class UserCreateQuoteSerializer(serializers.ModelSerializer):
                 {"non_field_errors": 
                     ["only deposit amount or token amount must be inserted."]})
 
-        # Set a phase if one exists for the ICO, otherwise throw an error.
+        # Find a live ICO.
         try:
-            ico = Ico.objects.get(company=user.company, id=ico_id)
-            validated_data['phase'] = ico.get_phase()
-        except (Ico.DoesNotExist, Phase.DoesNotExist):
+            ico = Ico.objects.get(company=user.company, id=ico_id, enabled=True)            
+        except Ico.DoesNotExist:
             raise exceptions.NotFound()
+
+        # Find a phase if one exists for the ICO, otherwise throw an error.
+        try:
+            phase = ico.get_phase()
+        except Phase.DoesNotExist:
+            raise serializers.ValidationError(
+                {"non_field_errors": ["The ICO has no active phases."]})
+
+        validated_data['phase'] = phase
 
         return validated_data       
 

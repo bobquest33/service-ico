@@ -87,35 +87,45 @@ class Currency(DateModel):
 
 class Ico(DateModel):
     company = models.ForeignKey('ico.Company')
-    number = models.IntegerField()
+    amount = MoneyField(default=Decimal(0))
     currency = models.ForeignKey('ico.Currency', related_name='ico')
     exchange_provider = models.CharField(max_length=200, null=True)
     fiat_currency = models.ForeignKey('ico.Currency', related_name='ico_fiat') # Base fiat currency for conversion rates, should be unchangable
     fiat_goal_amount = MoneyField(default=Decimal(0)) # Goal in base fiat currency, should be unchangable
     enabled = models.BooleanField(default=False)
 
+    def save(self, *args, **kwargs):
+        if self.enabled:
+            Account.objects.filter(company=self.company, enabled=True).update(
+                enabled=False)
+
+        return super(Ico, self).save(*args, **kwargs)
+
     def __str__(self):
         return str(self.currency) + "_" + str(self.company)
 
     def get_phase(self):
-        percent = (self.get_token_amount_sold() / self.number) * 100
+        amount_sold = self.get_amount_sold()
 
-        for phase in Phase.objects.filter(ico=self).order_by('level'):
-            if percent < phase.percentage:
-                return phase
-            else:
-                percent = percent - phase.percentage
+        if amount_sold < self.amount:
+            percent = (amount_sold / self.amount) * 100
+
+            for phase in Phase.objects.filter(ico=self).order_by('level'):
+                if percent < phase.percentage:
+                    return phase
+                else:
+                    percent = percent - phase.percentage
 
         raise Phase.DoesNotExist
 
-    def get_token_amount_sold(self):
+    def get_amount_sold(self):
         statuses = (PurchaseStatus.PENDING, PurchaseStatus.COMPLETE,)
 
         purchases = Purchase.objects.filter(quote__phase__ico=self, 
             status__in=statuses).aggregate(
-                total_tokens=Coalesce(models.Sum('quote__token_amount'), 0))
+                total_amount=Coalesce(models.Sum('quote__token_amount'), 0))
 
-        return purchases['total_tokens']
+        return purchases['total_amount']
 
 
 class Phase(DateModel):
