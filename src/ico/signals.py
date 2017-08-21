@@ -15,4 +15,4 @@ def create_rate(sender, instance, created, **kwargs):
 
     for currency in instance.ico.company.currency_set.all():
         rate, _ = Rate.objects.get_or_create(phase=instance, currency=currency)
-        rate.set_rate()
+        rate.refresh_rate()
