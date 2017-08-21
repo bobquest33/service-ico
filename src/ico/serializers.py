@@ -481,6 +481,10 @@ class AdminCreatePhaseSerializer(serializers.ModelSerializer):
         except Ico.DoesNotExist:
             raise exceptions.NotFound()
 
+        validated_data['fiat_rate'] = from_cents(
+            amount=validated_data['fiat_rate'],
+            divisibility=validated_data['ico'].currency.divisibility)
+
         return super(AdminCreatePhaseSerializer, self).create(validated_data)
 
 
