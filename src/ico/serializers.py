@@ -433,7 +433,7 @@ class AdminIcoSerializer(serializers.ModelSerializer, DatesMixin):
         model = Ico
         fields = ('id', 'currency', 'number', 'exchange_provider', 'fiat_currency',
             'fiat_goal_amount', 'enabled', 'created', 'updated')
-        read_only_field = ('id', 'currency', 'number', 'fiat_currency',
+        read_only_fields = ('id', 'currency', 'number', 'fiat_currency',
             'fiat_goal_amount', 'created', 'updated')
 
     def get_fiat_goal_amount(self, obj):
@@ -470,7 +470,7 @@ class AdminCreatePhaseSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Phase
-        fields = ('id', 'level', 'percentage', 'fiat_rate',)
+        fields = ('level', 'percentage', 'fiat_rate',)
 
     def create(self, validated_data):
         company = self.context.get('request').user.company
