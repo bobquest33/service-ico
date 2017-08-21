@@ -375,12 +375,12 @@ class AdminCreateIcoSerializer(serializers.ModelSerializer):
     """
 
     currency = serializers.CharField()
-    fiat_currency = serializers.CharField()
+    base_currency = serializers.CharField()
 
     class Meta:
         model = Ico
-        fields = ('currency', 'number', 'exchange_provider', 'fiat_currency', 
-            'fiat_goal_amount', 'enabled')
+        fields = ('currency', 'number', 'exchange_provider', 'base_currency', 
+            'base_goal_amount', 'enabled')
 
     def validate_currency(self, currency):
         company = self.context['request'].user.company
@@ -391,7 +391,7 @@ class AdminCreateIcoSerializer(serializers.ModelSerializer):
         except Currency.DoesNotExist:
             raise serializers.ValidationError("Invalid currency.")
 
-    def validate_fiat_currency(self, currency):
+    def validate_base_currency(self, currency):
         company = self.context['request'].user.company
 
         try:
@@ -402,9 +402,9 @@ class AdminCreateIcoSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data['company'] = self.context['request'].user.company
-        validated_data['fiat_goal_amount'] = from_cents(
-            amount=validated_data['fiat_goal_amount'],
-            divisibility=validated_data['fiat_currency'].divisibility)
+        validated_data['base_goal_amount'] = from_cents(
+            amount=validated_data['base_goal_amount'],
+            divisibility=validated_data['base_currency'].divisibility)
 
         # TODO: Also create transaction webhooks. 
         # Use rehive sdk to create a initiate and execute webhook. 
@@ -426,18 +426,18 @@ class AdminIcoSerializer(serializers.ModelSerializer, DatesMixin):
     """
 
     currency = AdminCurrencySerializer(read_only=True)
-    fiat_currency = AdminCurrencySerializer(read_only=True)
-    fiat_goal_amount = serializers.SerializerMethodField()
+    base_currency = AdminCurrencySerializer(read_only=True)
+    base_goal_amount = serializers.SerializerMethodField()
 
     class Meta:
         model = Ico
-        fields = ('id', 'currency', 'number', 'exchange_provider', 'fiat_currency',
-            'fiat_goal_amount', 'enabled', 'created', 'updated')
-        read_only_fields = ('id', 'currency', 'number', 'fiat_currency',
-            'fiat_goal_amount', 'created', 'updated')
+        fields = ('id', 'currency', 'number', 'exchange_provider', 'base_currency',
+            'base_goal_amount', 'enabled', 'created', 'updated')
+        read_only_fields = ('id', 'currency', 'number', 'base_currency',
+            'base_goal_amount', 'created', 'updated')
 
-    def get_fiat_goal_amount(self, obj):
-        return to_cents(obj.fiat_goal_amount, obj.fiat_currency.divisibility)
+    def get_base_goal_amount(self, obj):
+        return to_cents(obj.base_goal_amount, obj.base_currency.divisibility)
 
     def update(self, instance, validated_data):
         for key, value in validated_data.items():
@@ -452,14 +452,14 @@ class AdminIcoSerializer(serializers.ModelSerializer, DatesMixin):
 
 
 class AdminPhaseSerializer(serializers.ModelSerializer):
-    fiat_rate = serializers.SerializerMethodField()
+    base_rate = serializers.SerializerMethodField()
 
     class Meta:
         model = Phase
-        fields = ('id', 'level', 'percentage', 'fiat_rate',)
+        fields = ('id', 'level', 'percentage', 'base_rate',)
 
-    def get_fiat_rate(self, obj):
-        return to_cents(obj.fiat_rate, obj.ico.fiat_currency.divisibility)
+    def get_base_rate(self, obj):
+        return to_cents(obj.base_rate, obj.ico.base_currency.divisibility)
 
     def delete(self):
         instance = self.instance
@@ -470,7 +470,7 @@ class AdminCreatePhaseSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Phase
-        fields = ('level', 'percentage', 'fiat_rate',)
+        fields = ('level', 'percentage', 'base_rate',)
 
     def create(self, validated_data):
         company = self.context.get('request').user.company
@@ -481,9 +481,9 @@ class AdminCreatePhaseSerializer(serializers.ModelSerializer):
         except Ico.DoesNotExist:
             raise exceptions.NotFound()
 
-        validated_data['fiat_rate'] = from_cents(
-            amount=validated_data['fiat_rate'],
-            divisibility=validated_data['ico'].fiat_currency.divisibility)
+        validated_data['base_rate'] = from_cents(
+            amount=validated_data['base_rate'],
+            divisibility=validated_data['ico'].base_currency.divisibility)
 
         return super(AdminCreatePhaseSerializer, self).create(validated_data)
 
@@ -540,16 +540,16 @@ class UserIcoSerializer(serializers.ModelSerializer):
     """
 
     currency = AdminCurrencySerializer(read_only=True)
-    fiat_currency = AdminCurrencySerializer(read_only=True)
-    fiat_goal_amount = serializers.SerializerMethodField()
+    base_currency = AdminCurrencySerializer(read_only=True)
+    base_goal_amount = serializers.SerializerMethodField()
 
     class Meta:
         model = Ico
-        fields = ('id', 'currency', 'number', 'exchange_provider', 'fiat_currency',
-            'fiat_goal_amount', 'enabled')
+        fields = ('id', 'currency', 'number', 'exchange_provider', 'base_currency',
+            'base_goal_amount', 'enabled')
 
-    def get_fiat_goal_amount(self, obj):
-        return to_cents(obj.fiat_goal_amount, obj.fiat_currency.divisibility)
+    def get_base_goal_amount(self, obj):
+        return to_cents(obj.base_goal_amount, obj.base_currency.divisibility)
 
 
 class UserCreateQuoteSerializer(serializers.ModelSerializer):
