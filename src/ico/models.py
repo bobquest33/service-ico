@@ -180,7 +180,7 @@ class Rate(DateModel):
                 # "Backwards" checking on the rates symbol. If it
                 # matches do the inverse rate calculation
                 crypto_rate = Decimal(crypto_rates[reverse_symbol]['last'])
-                return (crypto_rate / ico_exchange_rate) * self.phase.base_rate
+                return ((1 / crypto_rate) * ico_exchange_rate) * self.phase.base_rate
             except KeyError:
                 # TODO: Call CONVERT api endpoint
                 pass
@@ -234,7 +234,7 @@ class Rate(DateModel):
             else:
                 # Inverse calculation to get the rate with
                 # relation to USD.
-                return (exchange_rate * ico_exchange_rate) * self.phase.base_rate
+                return ((1 / exchange_rate) * ico_exchange_rate) * self.phase.base_rate
 
     def refresh_rate(self):
         self.rate = self._calculate_rate()
