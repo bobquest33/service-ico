@@ -343,7 +343,9 @@ class AdminPhaseList(ListAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         instance = serializer.save()
-        return Response({'status': 'success', 'data': serializer.data})        
+        return Response({
+            'status': 'success',
+            'data': AdminPhaseSerializer(instance).data})
 
 
 class AdminPhaseView(GenericAPIView):
