@@ -90,8 +90,8 @@ class Ico(DateModel):
     amount = MoneyField(default=Decimal(0))
     currency = models.ForeignKey('ico.Currency', related_name='ico')
     exchange_provider = models.CharField(max_length=200, null=True)
-    fiat_currency = models.ForeignKey('ico.Currency', related_name='ico_fiat') # Base fiat currency for conversion rates, should be unchangable
-    fiat_goal_amount = MoneyField(default=Decimal(0)) # Goal in base fiat currency, should be unchangable
+    base_currency = models.ForeignKey('ico.Currency', related_name='ico_base')  # Base fiat currency for conversion rates, should be unchangable
+    base_goal_amount = MoneyField(default=Decimal(0))  # Goal in base fiat currency, should be unchangable
     enabled = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):
@@ -132,17 +132,23 @@ class Phase(DateModel):
     ico = models.ForeignKey('ico.Ico')
     level = models.IntegerField()
     percentage = models.IntegerField(default=100)
-    fiat_rate = MoneyField(default=Decimal(0))
+    base_rate = MoneyField(default=Decimal(0))
 
     def __str__(self):
         return str(self.level)
 
 
 class RateManager(models.Manager):
-    def get_queryset(self):
-        queryset = super(RateManager, self).get_querysset()
+
+    def get(self, *args, **kwargs):
+        obj = super(RateManager, self).get(*args, **kwargs)
+        obj.refresh_rate()
+        return obj
+
+    def filter(self, *args, **kwargs):
+        queryset = super(RateManager, self).filter(*args, **kwargs)
         for rate in queryset:
-            rate.set_rate()
+            rate.refresh_rate()
         return queryset
 
 
@@ -151,9 +157,45 @@ class Rate(DateModel):
     currency = models.ForeignKey('ico.Currency')
     rate = MoneyField(default=Decimal(0))
 
-    objects = RateManager
+    objects = RateManager()
 
-    def set_rate(self):
+    def _calculate_crypto_rate(self, fiat_rates):
+        currency_code = self.currency.code
+        ico_base_currency_code = self.phase.ico.base_currency.code
+        ico_exchange_rate = Decimal(fiat_rates[ico_base_currency_code]['rate'])
+
+        # Get the updated rates from the exchange or caches
+        crypto_rates = get_crypto_rates()
+
+        # For crypto currencies the rates are listed in
+        # currency pairs (symbols), in which case we would need to
+        # check them both ways because they are only listed
+        # in one "direction"
+        symbol = ico_base_currency_code + currency_code
+        reverse_symbol = currency_code + ico_base_currency_code
+        check_reverse = False
+
+        try:
+            # "Forward" checking of the rates symbol. If it
+            # matches do the normal rate calculation
+            if not symbol.startswith('BTC'):
+                # Bitcoin is treated as a fiat currency by the exchange
+                crypto_rate = Decimal(crypto_rates[symbol]['last'])
+                return crypto_rate * self.phase.base_rate
+        except KeyError:
+            check_reverse = True
+
+        if check_reverse:
+            try:
+                # "Backwards" checking on the rates symbol. If it
+                # matches do the inverse rate calculation
+                crypto_rate = Decimal(crypto_rates[reverse_symbol]['last'])
+                return ((1 / crypto_rate) * ico_exchange_rate) * self.phase.base_rate
+            except KeyError:
+                # TODO: Call CONVERT api endpoint
+                pass
+
+    def _calculate_rate(self):
         """
         Calculate the rate based on the most recent rates data
         from the exchange. Calculations are done with relation to the
@@ -174,69 +216,38 @@ class Rate(DateModel):
 
         # The ICO currency is worth one of itself
         if self.currency == self.phase.ico.currency:
-            self.rate = 1
+            return 1
 
         # This is the rate set in the phase so already has the proper rate
-        elif self.currency == self.phase.ico.fiat_currency:
-            self.rate = self.phase.fiat_rate
+        if self.currency == self.phase.ico.base_currency:
+            return self.phase.base_rate
 
+        # Get the updated rates from the exchange or caches
+        fiat_rates = get_fiat_rates()
+        currency_code = self.currency.code
+        ico_base_currency_code = self.phase.ico.base_currency.code
+
+        # The exchange lists bitcoin as BTC not XBT
+        if self.currency.code == 'XBT':
+            currency_code = 'BTC'
+
+        try:
+            ico_exchange_rate = Decimal(fiat_rates[ico_base_currency_code]['rate'])
+            exchange_rate = Decimal(fiat_rates[currency_code]['rate'])
+        except KeyError as exc:
+            return self._calculate_crypto_rate(fiat_rates)
         else:
-            # Get the updated rates from the exchange or caches
-            crypto_rates = get_crypto_rates()
-            fiat_rates = get_fiat_rates()
-            currency_code = self.currency.code
-
-            # The exchange lists bitcoin as BTC not XBT
-            if self.currency.code == 'XBT':
-                currency_code = 'BTC'
-
-            try:
-                fiat_rate = Decimal(fiat_rates[currency_code]['rate'])
-
-                if self.phase.ico.currency.code == 'USD':
-                    # "Forward" checking of the rates symbol since they
-                    # are USD based. Do the normal rate calculation.
-                    self.rate = fiat_rate * self.phase.fiat_rate
-                else:
-                    # Inverse calculation to get the rate with
-                    # relation to USD.
-                    self.rate = (1 / fiat_rate) * self.phase.fiat_rate
-            except KeyError:
-                pass
-
+            if self.phase.ico.base_currency.code == 'USD':
+                # "Forward" checking of the rates symbol since they
+                # are USD based. Do the normal rate calculation.
+                return exchange_rate * self.phase.base_rate
             else:
-                ico_fiat_currency_code = self.phase.ico.fiat_currency.code
+                # Inverse calculation to get the rate with
+                # relation to USD.
+                return ((1 / exchange_rate) * ico_exchange_rate) * self.phase.base_rate
 
-                # The exchange lists bitcoin as BTC not XBT
-                if self.phase.ico.fiat_currency.code == 'XBT':
-                    ico_fiat_currency_code = 'BTC'
-
-                # For crypto currencies the rates are listed in
-                # currency pairs (symbols), in which case we would need to
-                # check them both ways because they are only listed
-                # in one "direction"
-                symbol = currency_code + ico_fiat_currency_code
-                reverse_symbol = ico_fiat_currency_code + currency_code
-                check_reverse = False
-
-                try:
-                    # "Forward" checking of the rates symbol. If it
-                    # matches do the normal rate calculation
-                    crypto_rate = Decimal(crypto_rates[symbol]['last'])
-                    self.rate = crypto_rate * self.phase.fiat_rate
-                except KeyError:
-                    check_reverse = True
-
-                if check_reverse:
-                    try:
-                        # "Backwards" checking on the rates symbol. If it
-                        # matches do the inverse rate calculation
-                        crypto_rate = Decimal(crypto_rates[reverse_symbol]['last'])
-                        self.rate = (1 / crypto_rate) * self.phase.fiat_rate
-                    except KeyError:
-                        # TODO: Call CONVERT api endpoint
-                        pass
-
+    def refresh_rate(self):
+        self.rate = self._calculate_rate()
         self.save()
 
 
