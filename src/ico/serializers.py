@@ -444,6 +444,17 @@ class AdminPhaseSerializer(serializers.ModelSerializer):
     def get_fiat_rate(self, obj):
         return to_cents(obj.fiat_rate, obj.ico.fiat_currency.divisibility)
 
+    def delete(self):
+        instance = self.instance
+        instance.delete()
+
+
+class AdminCreatePhaseSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Phase
+        fields = ('id', 'level', 'percentage', 'fiat_rate',)
+
     def create(self, validated_data):
         company = self.context.get('request').user.company
         ico_id = self.context.get('view').kwargs.get('ico_id')
@@ -453,11 +464,7 @@ class AdminPhaseSerializer(serializers.ModelSerializer):
         except Ico.DoesNotExist:
             raise exceptions.NotFound()
 
-        return super(AdminPhaseSerializer, self).create(validated_data)
-
-    def delete(self):
-        instance = self.instance
-        instance.delete()
+        return super(AdminCreatePhaseSerializer, self).create(validated_data)
 
 
 class AdminRateSerializer(serializers.ModelSerializer):
@@ -466,7 +473,7 @@ class AdminRateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Rate
-        fields = ('currency', 'rate')
+        fields = ('id', 'currency', 'rate')
 
     def get_rate(self, obj):
         return to_cents(obj.rate, obj.currency.divisibility)
