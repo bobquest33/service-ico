@@ -243,11 +243,11 @@ class AdminTransactionInitiateWebhookSerializer(AdminWebhookSerializer):
                 deposit_amount=deposit_amount, 
                 deposit_currency=deposit_currency, 
                 phase=phase, 
-                created__lt=date_from).latest('created')
+                created__gte=date_from).latest('created')
 
         except Quote.DoesNotExist:
             rate = Rate.objects.get(phase=phase, currency=deposit_currency)
-            token_amount = Decimal(deposit_amount * rate.rate)
+            token_amount = Decimal(deposit_amount / rate.rate)
             quote = Quote.objects.create(user=user, 
                                          phase=phase,
                                          deposit_amount=deposit_amount, 
