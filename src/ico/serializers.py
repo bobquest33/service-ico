@@ -206,7 +206,7 @@ class AdminTransactionInitiateWebhookSerializer(AdminWebhookSerializer):
             # Rehive webhook will keep retrying.
             return validated_data
         except Purchase.DoesNotExist:
-            pass 
+            pass
 
         # Check if there is an enabled ICO and the ICO has at least one phase.
         # Exclude ICOs that have the same currency code as the transaction.
@@ -322,7 +322,7 @@ class AdminTransactionExecuteWebhookSerializer(AdminWebhookSerializer):
             # Simply return immediately, this isn't a relevant transaction.
             # Don't raise an error otherwise Rehive webhook will keep retrying.
             return validated_data
-        
+
         # If error occurs, rollback changes and raise error so that Rehive
         # retries (most likeley an APIException).
         with transaction.atomic():
@@ -374,12 +374,14 @@ class AdminCreateIcoSerializer(serializers.ModelSerializer):
     Serialize ico, create
     """
 
+    amount = serializers.IntegerField()
     currency = serializers.CharField()
+    base_goal_amount = serializers.IntegerField()
     base_currency = serializers.CharField()
 
     class Meta:
         model = Ico
-        fields = ('currency', 'number', 'exchange_provider', 'base_currency', 
+        fields = ('currency', 'amount', 'exchange_provider', 'base_currency', 
             'base_goal_amount', 'enabled')
 
     def validate_currency(self, currency):
@@ -402,6 +404,11 @@ class AdminCreateIcoSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data['company'] = self.context['request'].user.company
+
+        validated_data['amount'] = from_cents(
+            amount=validated_data['amount'],
+            divisibility=validated_data['currency'].divisibility)
+
         validated_data['base_goal_amount'] = from_cents(
             amount=validated_data['base_goal_amount'],
             divisibility=validated_data['base_currency'].divisibility)
@@ -431,9 +438,9 @@ class AdminIcoSerializer(serializers.ModelSerializer, DatesMixin):
 
     class Meta:
         model = Ico
-        fields = ('id', 'currency', 'number', 'exchange_provider', 'base_currency',
+        fields = ('id', 'currency', 'amount', 'exchange_provider', 'base_currency',
             'base_goal_amount', 'enabled', 'created', 'updated')
-        read_only_fields = ('id', 'currency', 'number', 'base_currency',
+        read_only_fields = ('id', 'currency', 'amount', 'base_currency',
             'base_goal_amount', 'created', 'updated')
 
     def get_base_goal_amount(self, obj):
@@ -502,9 +509,9 @@ class AdminCreatePhaseSerializer(serializers.ModelSerializer):
         return validated_data
 
     def create(self, validated_data):
-        validated_data['fiat_rate'] = from_cents(
-            amount=validated_data['fiat_rate'],
-            divisibility=validated_data['ico'].fiat_currency.divisibility)
+        validated_data['base_rate'] = from_cents(
+            amount=validated_data['base_rate'],
+            divisibility=validated_data['ico'].base_currency.divisibility)
 
         return super(AdminCreatePhaseSerializer, self).create(validated_data)
 
@@ -544,7 +551,7 @@ class AdminQuoteSerializer(serializers.ModelSerializer, DatesMixin):
 
 
 class AdminPurchaseSerializer(serializers.ModelSerializer, DatesMixin):
-    quote = serializers.IntegerField(source='quote.id')
+    quote = AdminQuoteSerializer(read_only=True)
     phase = serializers.IntegerField(source='quote.phase.level')
     status = serializers.ChoiceField(choices=PurchaseStatus.choices(),
         source='status.value')
@@ -562,23 +569,19 @@ class UserIcoSerializer(serializers.ModelSerializer):
 
     currency = AdminCurrencySerializer(read_only=True)
     base_currency = AdminCurrencySerializer(read_only=True)
-    base_goal_amount = serializers.SerializerMethodField()
 
     class Meta:
         model = Ico
-        fields = ('id', 'currency', 'number', 'exchange_provider', 'base_currency',
-            'base_goal_amount', 'enabled')
+        fields = ('id', 'currency', 'amount', 'base_currency', 'enabled')
 
     def get_base_goal_amount(self, obj):
         return to_cents(obj.base_goal_amount, obj.base_currency.divisibility)
 
 
 class UserCreateQuoteSerializer(serializers.ModelSerializer):
-    deposit_amount = serializers.DecimalField(max_digits=28, decimal_places=18, 
-        required=False)
+    deposit_amount = serializers.IntegerField(required=False)
     deposit_currency = serializers.CharField()
-    token_amount = serializers.DecimalField(max_digits=28, decimal_places=18, 
-        required=False)
+    token_amount = serializers.IntegerField(required=False)
 
     class Meta:
         model = Quote
@@ -613,7 +616,12 @@ class UserCreateQuoteSerializer(serializers.ModelSerializer):
 
         # Find a live ICO.
         try:
-            ico = Ico.objects.get(company=user.company, id=ico_id, enabled=True)            
+            ico = Ico.objects.get(company=user.company, id=ico_id, enabled=True)
+
+            if not ico.enabled:
+                raise serializers.ValidationError(
+                    {"non_field_errors": ["The ICO is disabled."]})                
+
         except Ico.DoesNotExist:
             raise exceptions.NotFound()
 
@@ -668,12 +676,14 @@ class UserQuoteSerializer(serializers.ModelSerializer, DatesMixin):
     deposit_currency = AdminCurrencySerializer(read_only=True)
     deposit_amount = serializers.SerializerMethodField()
     token_amount = serializers.SerializerMethodField()
+    token_currency = AdminCurrencySerializer(read_only=True, 
+        source='phase.ico.currency')
     rate = serializers.SerializerMethodField()
 
     class Meta:
         model = Quote
         fields = ('id', 'phase', 'deposit_amount', 'deposit_currency', 
-            'token_amount', 'rate', 'created', 'updated')
+            'token_amount', 'token_currency', 'rate', 'created', 'updated')
 
     def get_deposit_amount(self, obj):
         return to_cents(obj.deposit_amount, obj.deposit_currency.divisibility)
@@ -686,12 +696,11 @@ class UserQuoteSerializer(serializers.ModelSerializer, DatesMixin):
 
 
 class UserPurchaseSerializer(serializers.ModelSerializer, DatesMixin):
-    quote = serializers.IntegerField(source='quote.id')
-    phase = serializers.IntegerField(source='quote.phase.level')
+    quote = UserQuoteSerializer(read_only=True)
     status = serializers.ChoiceField(choices=PurchaseStatus.choices(),
         source='status.value')
 
     class Meta:
         model = Purchase
-        fields = ('id', 'quote', 'phase', 'deposit_tx', 'token_tx', 'status',
+        fields = ('id', 'quote', 'deposit_tx', 'token_tx', 'status',
                   'created', 'updated')

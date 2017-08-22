@@ -90,13 +90,13 @@ class Ico(DateModel):
     amount = MoneyField(default=Decimal(0))
     currency = models.ForeignKey('ico.Currency', related_name='ico')
     exchange_provider = models.CharField(max_length=200, null=True)
-    base_currency = models.ForeignKey('ico.Currency', related_name='ico_base')  # Base fiat currency for conversion rates, should be unchangable
+    base_currency = models.ForeignKey('ico.Currency', null=True, related_name='ico_base')  # Base fiat currency for conversion rates, should be unchangable
     base_goal_amount = MoneyField(default=Decimal(0))  # Goal in base fiat currency, should be unchangable
     enabled = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):
         if self.enabled:
-            Account.objects.filter(company=self.company, enabled=True).update(
+            Ico.objects.filter(company=self.company, enabled=True).update(
                 enabled=False)
 
         return super(Ico, self).save(*args, **kwargs)
@@ -258,6 +258,16 @@ class Quote(DateModel):
     deposit_currency = models.ForeignKey('ico.Currency')
     token_amount = MoneyField(default=Decimal(0))
     rate = MoneyField(default=Decimal(0)) # Rate of conversion between deposit currency and 1 token at time of quote.
+
+    def save(self, *args, **kwargs):
+        # Delete all previous quotes for the same currency and phase.
+        if not self.id:
+            Quote.objects.filter(phase=self.phase, 
+                deposit_amount=self.deposit_amount,
+                deposit_currency=self.deposit_currency,
+                purchase=None).delete()
+
+        return super(Quote, self).save(*args, **kwargs)
 
 
 class Purchase(DateModel):
