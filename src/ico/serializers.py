@@ -578,6 +578,18 @@ class UserIcoSerializer(serializers.ModelSerializer):
         return to_cents(obj.base_goal_amount, obj.base_currency.divisibility)
 
 
+class UserRateSerializer(serializers.ModelSerializer, DatesMixin):
+    currency = AdminCurrencySerializer(read_only=True)
+    rate = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Rate
+        fields = ('id', 'currency', 'rate', 'created', 'updated')
+
+    def get_rate(self, obj):
+        return to_cents(obj.rate, obj.currency.divisibility)
+
+
 class UserCreateQuoteSerializer(serializers.ModelSerializer):
     deposit_amount = serializers.IntegerField(required=False)
     deposit_currency = serializers.CharField()

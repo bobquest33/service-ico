@@ -26,6 +26,8 @@ urlpatterns = (
 
     url(r'^user/icos/$', views.UserIcoList.as_view(), name='user-icos'),
     url(r'^user/icos/(?P<ico_id>\d+)/$', views.UserIcoView.as_view(), name='user-icos-view'),
+    url(r'^user/icos/(?P<ico_id>\d+)/rates/$', views.UserRateList.as_view(), name='user-rates'),
+    url(r'^user/icos/(?P<ico_id>\d+)/rates/(?P<rate_id>\d+)/$', views.UserRateView.as_view(), name='user-icos-rates'),
     url(r'^user/icos/(?P<ico_id>\d+)/quotes/$', views.UserQuoteList.as_view(), name='user-quotes'),
     url(r'^user/icos/(?P<ico_id>\d+)/quotes/(?P<quote_id>\d+)/$', views.UserQuoteView.as_view(), name='user-quotes-view'),
     url(r'^user/icos/(?P<ico_id>\d+)/purchases/$', views.UserPurchaseList.as_view(), name='user-purchases'),

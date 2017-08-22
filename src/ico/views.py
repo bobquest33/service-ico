@@ -6,7 +6,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
 from rest_framework.views import APIView
-from rest_framework import exceptions
+from rest_framework import exceptions, filters
 from rest_framework.pagination import PageNumberPagination
 
 from ico.models import *
@@ -203,6 +203,8 @@ class AdminCurrencyList(ListAPIView):
     pagination_class = ResultsSetPagination
     serializer_class = AdminCurrencySerializer
     authentication_classes = (AdminAuthentication,)
+    filter_backends = (filters.DjangoFilterBackend,)
+    filter_fields = ('code',)
 
     def get_queryset(self):
         company = self.request.user.company
@@ -245,6 +247,8 @@ class AdminIcoList(ListAPIView):
     pagination_class = ResultsSetPagination
     serializer_class = AdminIcoSerializer
     authentication_classes = (AdminAuthentication,)
+    filter_backends = (filters.DjangoFilterBackend,)
+    filter_fields = ('id', 'enabled', 'currency__code',)
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -322,6 +326,8 @@ class AdminPhaseList(ListAPIView):
     pagination_class = ResultsSetPagination
     serializer_class = AdminPhaseSerializer
     authentication_classes = (AdminAuthentication,)
+    filter_backends = (filters.DjangoFilterBackend,)
+    filter_fields = ('id', 'level',)
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -396,6 +402,8 @@ class AdminRateList(ListAPIView):
     pagination_class = ResultsSetPagination
     serializer_class = AdminRateSerializer
     authentication_classes = (AdminAuthentication,)
+    filter_backends = (filters.DjangoFilterBackend,)
+    filter_fields = ('currency__code',)
 
     def get_queryset(self):
         company = self.request.user.company
@@ -445,6 +453,8 @@ class AdminQuoteList(ListAPIView):
     pagination_class = ResultsSetPagination
     serializer_class = AdminQuoteSerializer
     authentication_classes = (AdminAuthentication,)
+    filter_backends = (filters.DjangoFilterBackend,)
+    filter_fields = ('id', 'deposit_currency__code',)
 
     def get_queryset(self):
         company = self.request.user.company
@@ -491,6 +501,8 @@ class AdminPurchaseList(ListAPIView):
     pagination_class = ResultsSetPagination
     serializer_class = AdminPurchaseSerializer
     authentication_classes = (AdminAuthentication,)
+    filter_backends = (filters.DjangoFilterBackend,)
+    filter_fields = ('id', 'quote__id', 'quote__deposit_currency__code',)
 
     def get_queryset(self):
         company = self.request.user.company
@@ -537,6 +549,8 @@ class UserIcoList(ListAPIView):
     pagination_class = ResultsSetPagination
     serializer_class = UserIcoSerializer
     authentication_classes = (UserAuthentication,)
+    filter_backends = (filters.DjangoFilterBackend,)
+    filter_fields = ('id', 'enabled', 'currency__code',)
 
     def get_queryset(self):
         company = self.request.user.company
@@ -565,6 +579,60 @@ class UserIcoView(GenericAPIView):
         return Response({'status': 'success', 'data': serializer.data})
 
 
+class UserRateList(ListAPIView):
+    """
+    List rates.
+    """
+
+    allowed_methods = ('GET',)
+    pagination_class = ResultsSetPagination
+    serializer_class = UserRateSerializer
+    authentication_classes = (UserAuthentication,)
+    filter_backends = (filters.DjangoFilterBackend,)
+    filter_fields = ('id', 'currency__code',)
+
+    def get_queryset(self):
+        company = self.request.user.company
+        ico_id = self.kwargs['ico_id']
+
+        try:
+            ico = Ico.objects.get(id=ico_id, company=company)
+            phase = ico.get_phase()
+        except (Ico.DoesNotExist, Phase.DoesNotExist):
+            raise exceptions.NotFound()
+
+        return Rate.objects.filter(phase=phase)
+
+
+class UserRateView(GenericAPIView):
+    """
+    View rates.
+    """
+
+    allowed_methods = ('GET',)
+    serializer_class = UserRateSerializer
+    authentication_classes = (UserAuthentication,)
+
+    def get(self, request, *args, **kwargs):
+        company = request.user.company
+        ico_id = kwargs['ico_id']
+        rate_id = kwargs['rate_id']
+
+        try:
+            ico = Ico.objects.get(id=ico_id, company=company)
+            phase = ico.get_phase()
+        except (Ico.DoesNotExist, Phase.DoesNotExist):
+            raise exceptions.NotFound()
+
+        try:
+            rate = Rate.objects.get(phase=phase, id=rate_id)
+        except Rate.DoesNotExist:
+            raise exceptions.NotFound()
+
+        serializer = self.get_serializer(rate)
+        return Response({'status': 'success', 'data': serializer.data})
+
+
 class UserQuoteList(ListAPIView):
     """
     List and create quotes.
@@ -574,6 +642,8 @@ class UserQuoteList(ListAPIView):
     pagination_class = ResultsSetPagination
     serializer_class = UserQuoteSerializer
     authentication_classes = (UserAuthentication,)
+    filter_backends = (filters.DjangoFilterBackend,)
+    filter_fields = ('id', 'deposit_currency__code',)
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -632,6 +702,8 @@ class UserPurchaseList(ListAPIView):
     pagination_class = ResultsSetPagination
     serializer_class = UserPurchaseSerializer
     authentication_classes = (UserAuthentication,)
+    filter_backends = (filters.DjangoFilterBackend,)
+    filter_fields = ('id', 'quote__id', 'quote__deposit_currency__code',)
 
     def get_queryset(self):
         user = self.request.user
