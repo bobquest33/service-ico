@@ -434,6 +434,7 @@ class AdminIcoSerializer(serializers.ModelSerializer, DatesMixin):
 
     currency = AdminCurrencySerializer(read_only=True)
     base_currency = AdminCurrencySerializer(read_only=True)
+    amount = serializers.SerializerMethodField()
     base_goal_amount = serializers.SerializerMethodField()
 
     class Meta:
@@ -442,6 +443,9 @@ class AdminIcoSerializer(serializers.ModelSerializer, DatesMixin):
             'base_goal_amount', 'enabled', 'created', 'updated')
         read_only_fields = ('id', 'currency', 'amount', 'base_currency',
             'base_goal_amount', 'created', 'updated')
+
+    def get_amount(self, obj):
+        return to_cents(obj.amount, obj.currency.divisibility)
 
     def get_base_goal_amount(self, obj):
         return to_cents(obj.base_goal_amount, obj.base_currency.divisibility)
@@ -662,15 +666,17 @@ class UserCreateQuoteSerializer(serializers.ModelSerializer):
         # If a deposit amount is submitted than a ICO token amount needs to be 
         # calculated.
         if deposit_amount and not token_amount:
-            token_amount = Decimal(deposit_amount * rate.rate)
-            
+            deposit_amount = from_cents(deposit_amount, 
+                deposit_currency.divisibility)
+
+            token_amount = Decimal(deposit_amount / rate.rate)
+
         # If an ICO token amount is submitted than a deposit amount needs to be 
         # calculated instead.
         elif token_amount and not deposit_amount:
-            deposit_amount = Decimal(token_amount / rate.rate)
-
-        deposit_amount = from_cents(deposit_amount, deposit_currency.divisibility)
-        token_amount = from_cents(token_amount, deposit_currency.divisibility)
+            token_amount = from_cents(token_amount, 
+                phase.ico.currency.divisibility)
+            deposit_amount = Decimal(token_amount * rate.rate)
 
         create_data = {
             "user": user,
@@ -701,7 +707,7 @@ class UserQuoteSerializer(serializers.ModelSerializer, DatesMixin):
         return to_cents(obj.deposit_amount, obj.deposit_currency.divisibility)
 
     def get_token_amount(self, obj):
-        return to_cents(obj.token_amount, obj.deposit_currency.divisibility)
+        return to_cents(obj.token_amount, obj.phase.ico.currency.divisibility)
 
     def get_rate(self, obj):
         return to_cents(obj.rate, obj.deposit_currency.divisibility)
