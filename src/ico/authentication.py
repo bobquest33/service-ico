@@ -40,7 +40,6 @@ class AdminAuthentication(HeaderAuthentication):
 
     def authenticate(self, request):
         token = self.get_auth_header(request)
-        token = "194ae24365f302f1c5dd9a1acbc57089d86aef6ddbd5d8930125fc96bcee6352"
 
         rehive = Rehive(token)
 
@@ -72,7 +71,6 @@ class UserAuthentication(HeaderAuthentication):
 
     def authenticate(self, request):
         token = self.get_auth_header(request)
-        token = "194ae24365f302f1c5dd9a1acbc57089d86aef6ddbd5d8930125fc96bcee6352"
 
         rehive = Rehive(token)
 
