@@ -180,3 +180,15 @@ CACHES = {
 CACHE_DIR = os.path.join(PROJECT_DIR, 'var/cache')
 
 FORMAT_MODULE_PATH = 'config.formats'
+
+# Logging
+# ---------------------------------------------------------------------------------------------------------------------
+from django.utils.log import DEFAULT_LOGGING
+
+LOGGING = DEFAULT_LOGGING
+
+LOGGING['handlers'].update({
+    'console': {
+        'level': 'INFO',
+        'class': 'logging.StreamHandler',
+    }})
