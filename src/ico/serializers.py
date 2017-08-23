@@ -487,6 +487,7 @@ class AdminPhaseSerializer(serializers.ModelSerializer):
 class AdminCreatePhaseSerializer(serializers.ModelSerializer):
     level = serializers.IntegerField(min_value=1, max_value=7)
     percentage = serializers.IntegerField(min_value=1, max_value=100)
+    base_rate = serializers.IntegerField()
 
     class Meta:
         model = Phase
