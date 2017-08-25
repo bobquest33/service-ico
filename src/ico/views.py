@@ -6,7 +6,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
 from rest_framework.views import APIView
-from rest_framework import exceptions, filters
+from rest_framework import exceptions, status, filters
 from rest_framework.pagination import PageNumberPagination
 
 from ico.models import *
@@ -118,7 +118,9 @@ class ActivateView(GenericAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         instance = serializer.save()
-        return Response({'status': 'success', 'data': serializer.data})
+        return Response({'status': 'success',
+                         'data': serializer.data},
+                         status=status.HTTP_201_CREATED)
 
 
 class DeactivateView(GenericAPIView):
@@ -265,7 +267,9 @@ class AdminIcoList(ListAPIView):
         ico = serializer.save()
         data = AdminIcoSerializer(serializer.instance, 
             context={'request': request}).data
-        return Response({'status': 'success', 'data': data})
+        return Response({'status': 'success',
+                         'data': data},
+                         status=status.HTTP_201_CREATED)
 
 
 class AdminIcoView(GenericAPIView):
@@ -349,9 +353,9 @@ class AdminPhaseList(ListAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         instance = serializer.save()
-        return Response({
-            'status': 'success',
-            'data': AdminPhaseSerializer(instance).data})
+        return Response({'status': 'success',
+                         'data': AdminPhaseSerializer(instance).data},
+                         status=status.HTTP_201_CREATED)
 
 
 class AdminPhaseView(GenericAPIView):
@@ -667,7 +671,9 @@ class UserQuoteList(ListAPIView):
         ico = serializer.save()
         data = UserQuoteSerializer(serializer.instance, 
             context={'request': request}).data
-        return Response({'status': 'success', 'data': data})
+        return Response({'status': 'success',
+                         'data': data},
+                         status=status.HTTP_201_CREATED)
 
 
 class UserQuoteView(GenericAPIView):
