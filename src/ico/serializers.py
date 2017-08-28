@@ -1,6 +1,8 @@
 import json
 import uuid
 import datetime
+import decimal
+from decimal import Decimal
 
 from rest_framework import serializers, exceptions
 from rest_framework.serializers import ModelSerializer
@@ -12,7 +14,7 @@ from ico.enums import WebhookEvent, PurchaseStatus
 from ico.authentication import HeaderAuthentication
 from rehive import Rehive, APIException
 from ico.utils.common import (
-    to_cents, from_cents, quantize
+    to_cents, from_cents
 )
 
 from logging import getLogger
@@ -413,6 +415,18 @@ class AdminCreateIcoSerializer(serializers.ModelSerializer):
             amount=validated_data['base_goal_amount'],
             divisibility=validated_data['base_currency'].divisibility)
 
+        try:
+            Decimal(validated_data['amount']).quantize(Decimal(".1") ** 18)
+        except decimal.InvalidOperation:
+            raise serializers.ValidationError(
+                {"amount": ["Unsupported number size."]})   
+
+        try:
+            Decimal(validated_data['base_goal_amount']).quantize(Decimal(".1") ** 18)
+        except decimal.InvalidOperation:
+            raise serializers.ValidationError(
+                {"base_goal_amount": ["Unsupported number size."]})   
+
         # TODO: Also create transaction webhooks. 
         # Use rehive sdk to create a initiate and execute webhook. 
         #    1) event: transaction.execute
@@ -514,9 +528,17 @@ class AdminCreatePhaseSerializer(serializers.ModelSerializer):
         return validated_data
 
     def create(self, validated_data):
-        validated_data['base_rate'] = from_cents(
+        base_rate = from_cents(
             amount=validated_data['base_rate'],
             divisibility=validated_data['ico'].base_currency.divisibility)
+
+        try:
+            Decimal(base_rate).quantize(Decimal(".1") ** 18)
+        except decimal.InvalidOperation:
+            raise serializers.ValidationError(
+                {"base_rate": ["Unsupported number size."]})  
+
+        validated_data['base_rate'] = base_rate
 
         return super(AdminCreatePhaseSerializer, self).create(validated_data)
 
