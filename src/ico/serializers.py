@@ -585,7 +585,7 @@ class AdminPurchaseSerializer(serializers.ModelSerializer, DatesMixin):
 
     class Meta:
         model = Purchase
-        fields = ('quote', 'phase', 'deposit_tx', 'token_tx', 'status',
+        fields = ('id', 'quote', 'phase', 'deposit_tx', 'token_tx', 'status',
                   'created', 'updated')
 
 
