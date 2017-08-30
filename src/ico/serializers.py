@@ -104,6 +104,28 @@ class ActivateSerializer(serializers.Serializer):
                 kwargs['company'] = company
                 currency = Currency.objects.create(**kwargs)
 
+            # Create the associated webhooks on Rehive.
+            # TODO: these webhook URLS are wrong, wait for update to webhooks
+            # TODO: the URL should come from the current running ENV
+            try:
+                webhooks = [
+                    {"url": "https://rehive.com/api/3/admin/webhooks/", # GET URL FROM ENV
+                     "secret": company.secret,
+                     "event": "transaction.initiate",
+                     "tx_type": "credit"},
+                    {"url": "https://rehive.com/api/3/admin/webhooks/", # GET URL FROM ENVm
+                     "secret": company.secret,
+                     "event": "transaction.execute",
+                     "tx_type": "credit"}
+                ]
+
+                for kwargs in webhooks:
+                    rehive.admin.webhooks.create(**kwargs)
+
+            except APIException:
+                raise serializers.ValidationError(
+                    {"token": ["Error disabling the service webhooks."]})
+
             return company
 
 
@@ -135,13 +157,28 @@ class DeactivateSerializer(serializers.Serializer):
 
         return validated_data
 
+    @transaction.atomic
     def delete(self):
+        company = self.validated_data['company']
+        admin = self.validated_data['company'].admin
+
+        rehive = Rehive(admin.token)
+        
+        # Delete the associated webhooks from Rehive.
+        try:
+            webhooks = rehive.admin.webhooks.get(
+                filters={"secret":company.secret})
+
+            for webhook in webhooks:
+                rehive.admin.webhooks.delete(webhook['id'])
+
+        except APIException:
+            raise serializers.ValidationError(
+                {"token": ["Error disabling the service webhooks."]})
+
         # Deleting the owner will cascade delete the company and all other
         # children objects.
         self.validated_data['company'].admin.delete()
-
-        # TODO: Also delete Rehive webhooks using SDK.
-        # Need to update Rehive to allow filtering of webhooks by secret.
 
 
 class AdminWebhookSerializer(serializers.Serializer):
