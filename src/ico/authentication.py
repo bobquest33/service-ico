@@ -40,7 +40,7 @@ class AdminAuthentication(HeaderAuthentication):
 
     def authenticate(self, request):
         token = self.get_auth_header(request)
-        token = "9b13fb2b0fb1c4fdb7c3f4ae93146d77ba5caf5ce0be07424522abb1b296afe2" #Overide token for testing
+        #token = "" #Overide token for testing
 
         rehive = Rehive(token)
 
@@ -72,7 +72,7 @@ class UserAuthentication(HeaderAuthentication):
 
     def authenticate(self, request):
         token = self.get_auth_header(request)
-        token = "9b13fb2b0fb1c4fdb7c3f4ae93146d77ba5caf5ce0be07424522abb1b296afe2" #Overide token for testing
+        #token = "" #Overide token for testing
  
         rehive = Rehive(token)
 

@@ -280,12 +280,20 @@ class Quote(DateModel):
 class PurchaseManager(models.Manager):
 
     def initiate_purchase(self, company, data):
+        """
+        Initiate a purchase in the ICO service.
+
+        Uncaught exceptions will cause retries in the Rehive webhook logic, in
+        order to not cause a retry, there is a SilentException whic will still
+        return a 200 OK status.
+        """
+
         tx_id = data.get('id')
         status =  data.get('status')
         currency =  data.get('currency')
 
         # Check if the transaction is already associated to any purchases.
-        # This stops already initiated/executed transactions.
+        # This silently fails already initiated/executed transactions.
         try:
             self.get(Q(Q(deposit_tx=tx_id) | Q(token_tx=tx_id)),
                 quote__user__company=company)
@@ -306,7 +314,7 @@ class PurchaseManager(models.Manager):
         # Get currency details.
         deposit_currency = Currency.objects.get(
             code__iexact=currency['code'], company=company, 
-            enabled=True)  
+            enabled=True)
 
         deposit_cent_amount = Decimal(str(data['amount']))
         deposit_divisibility = Decimal(str(deposit_currency.divisibility))
@@ -317,13 +325,14 @@ class PurchaseManager(models.Manager):
             identifier=uuid.UUID(data['user']['identifier']).hex,
             company=company)
 
-        # Check for matching quotes, if none exist, create one.
+        # Check for matching unused quotes, if none exist, create one.
         try:
             date_from = datetime.datetime.now() - datetime.timedelta(minutes=10)
             quote = Quote.objects.filter(
                 user=user, 
                 deposit_amount=deposit_amount, 
-                deposit_currency=deposit_currency, 
+                deposit_currency=deposit_currency,
+                purchase=None,
                 phase=phase, 
                 created__gte=date_from).latest('created')
 
@@ -340,20 +349,34 @@ class PurchaseManager(models.Manager):
         return self.create_purchase(quote, tx_id, status)
 
     def execute_purchase(self, company, data):
+        """
+        Execute a purchase with a new status (complte/fail) the transaction.
+
+        Uncaught exceptions will cause retries in the Rehive webhook logic, in
+        order to not cause a retry, there is a SilentException whic will still
+        return a 200 OK status.
+        """
+
         tx_id = data.get('id')
         status =  data.get('status')
+        currency =  data.get('currency')
 
-        print("Execute stuff")
-
-        # Get an existing purchase or create one. We create one because the 
-        # initiate webhook might come through after the execute. 
+        # Check if there is a disabled or enabled ICO for purchase completion.
+        # Exclude ICO instances that have the same currency code as the received
+        # transaction.
         try:
-            purchase = self.exclude(token_tx__isnull=True).get(
-                deposit_tx=tx_id,
-                status=PurchaseStatus.PENDING,
-                quote__user__company=company)
-        except Purchase.DoesNotExist:
-            purchase = self.initiate_purchase(company, data)
+            ico = Ico.objects.exclude(currency__code=currency['code']).get(
+                company=company)
+            phase = ico.get_phase()
+        except (Ico.DoesNotExist, Phase.DoesNotExist):
+            raise SilentException
+
+        # Try to find an existing purchase with the same deposit_tx as the 
+        # transaction received in the webhook.
+        purchase = self.exclude(token_tx__isnull=True).get(
+            deposit_tx=tx_id,
+            status=PurchaseStatus.PENDING,
+            quote__user__company=company)
 
         return self.update_purchase(purchase, status)
 
@@ -379,6 +402,8 @@ class PurchaseManager(models.Manager):
 
         purchase.token_tx = token_tx['id']
         purchase.save()
+
+        print(purchase)
 
         return purchase    
 

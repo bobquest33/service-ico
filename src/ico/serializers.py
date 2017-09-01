@@ -7,6 +7,7 @@ from decimal import Decimal
 from rest_framework import serializers, exceptions
 from rest_framework.serializers import ModelSerializer
 from django.db import transaction
+from django.core.exceptions import ObjectDoesNotExist
 
 from ico.models import *
 from ico.exceptions import SilentException
@@ -197,8 +198,8 @@ class AdminTransactionInitiateWebhookSerializer(AdminWebhookSerializer):
             Purchase.objects.initiate_purchase(company, data)            
         except SilentException:
             return validated_data
-        except Exception:
-            raise
+        except ObjectDoesNotExist as exc:
+            raise serializers.ValidationError({"non_field_errors": str(exc)})
 
         return validated_data
 
@@ -233,8 +234,8 @@ class AdminTransactionExecuteWebhookSerializer(AdminWebhookSerializer):
             Purchase.objects.execute_purchase(company, data)            
         except SilentException:
             return validated_data
-        except Exception:
-            raise
+        except ObjectDoesNotExist as exc:
+            raise serializers.ValidationError({"non_field_errors": str(exc)})
 
         return validated_data
 
