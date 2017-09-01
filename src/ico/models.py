@@ -4,11 +4,19 @@ from enumfields import EnumField
 from decimal import Decimal
 
 from django.db import models
+from django.db.models import Q
 from django.utils.timezone import utc
 from django.db.models.functions import Coalesce
+from django.db import transaction
+from rest_framework.exceptions import ValidationError
+from rehive import Rehive
 
+from ico.exceptions import SilentException
 from ico.enums import PurchaseStatus
 from ico.rates import get_crypto_rates, get_fiat_rates
+from ico.utils.common import (
+    to_cents, from_cents
+)
 
 from logging import getLogger
 
@@ -269,8 +277,129 @@ class Quote(DateModel):
         return super(Quote, self).save(*args, **kwargs)
 
 
+class PurchaseManager(models.Manager):
+
+    def initiate_purchase(self, company, data):
+        tx_id = data.get('id')
+        status =  data.get('status')
+        currency =  data.get('currency')
+
+        # Check if the transaction is already associated to any purchases.
+        # This stops already initiated/executed transactions.
+        try:
+            self.get(Q(Q(deposit_tx=tx_id) | Q(token_tx=tx_id)),
+                quote__user__company=company)
+            raise SilentException
+        except Purchase.DoesNotExist:
+            pass
+
+        # Check if there is an enabled ICO and the ICO has at least one phase.
+        # Exclude ICO instances that have the same currency code as the received
+        # transaction.
+        try:
+            ico = Ico.objects.exclude(currency__code=currency['code']).get(
+                company=company, enabled=True)
+            phase = ico.get_phase()
+        except (Ico.DoesNotExist, Phase.DoesNotExist):
+            raise SilentException
+
+        # Get currency details.
+        deposit_currency = Currency.objects.get(
+            code__iexact=currency['code'], company=company, 
+            enabled=True)  
+
+        deposit_cent_amount = Decimal(str(data['amount']))
+        deposit_divisibility = Decimal(str(deposit_currency.divisibility))
+        deposit_amount = from_cents(deposit_cent_amount, deposit_divisibility)  
+ 
+        # Get or create a user object.
+        user, created = User.objects.get_or_create(
+            identifier=uuid.UUID(data['user']['identifier']).hex,
+            company=company)
+
+        # Check for matching quotes, if none exist, create one.
+        try:
+            date_from = datetime.datetime.now() - datetime.timedelta(minutes=10)
+            quote = Quote.objects.filter(
+                user=user, 
+                deposit_amount=deposit_amount, 
+                deposit_currency=deposit_currency, 
+                phase=phase, 
+                created__gte=date_from).latest('created')
+
+        except Quote.DoesNotExist:
+            rate = Rate.objects.get(phase=phase, currency=deposit_currency)
+            token_amount = Decimal(deposit_amount / rate.rate)
+            quote = Quote.objects.create(user=user, 
+                                         phase=phase,
+                                         deposit_amount=deposit_amount, 
+                                         deposit_currency=deposit_currency,
+                                         token_amount=token_amount,
+                                         rate=rate.rate)
+
+        return self.create_purchase(quote, tx_id, status)
+
+    def execute_purchase(self, company, data):
+        tx_id = data.get('id')
+        status =  data.get('status')
+
+        print("Execute stuff")
+
+        # Get an existing purchase or create one. We create one because the 
+        # initiate webhook might come through after the execute. 
+        try:
+            purchase = self.exclude(token_tx__isnull=True).get(
+                deposit_tx=tx_id,
+                status=PurchaseStatus.PENDING,
+                quote__user__company=company)
+        except Purchase.DoesNotExist:
+            purchase = self.initiate_purchase(company, data)
+
+        return self.update_purchase(purchase, status)
+
+    @transaction.atomic()
+    def create_purchase(self, quote, tx_id, status):
+        rehive = Rehive(quote.user.company.admin.token)
+
+        # Create ICO purchase.
+        purchase = self.create(quote=quote, deposit_tx=tx_id,
+            status=status)
+
+        # Get token amount in cents for Rehive.
+        token_divisibility = Decimal(
+            str(quote.phase.ico.currency.divisibility))
+        token_cent_amount = to_cents(quote.token_amount, token_divisibility) 
+
+        # Create asscociated token credit transaction.
+        token_tx = rehive.admin.transactions.create_credit(
+            user=str(quote.user.identifier),
+            amount=token_cent_amount, 
+            currency=quote.phase.ico.currency.code, 
+            confirm_on_create=False)
+
+        purchase.token_tx = token_tx['id']
+        purchase.save()
+
+        return purchase    
+
+    @transaction.atomic()
+    def update_purchase(self, purchase, status):
+        rehive = Rehive(purchase.quote.user.company.admin.token) 
+
+        # Update ICO purchase status.
+        purchase.status = status
+        purchase.save()
+
+        # Update associated Rehive transaction.
+        rehive.admin.transactions.patch(purchase.token_tx, status)
+ 
+        return purchase
+
+
 class Purchase(DateModel):
     quote = models.ForeignKey('ico.Quote')
     deposit_tx = models.CharField(unique=True, max_length=200, null=True)
     token_tx = models.CharField(unique=True, max_length=200, null=True)
     status = EnumField(PurchaseStatus, max_length=50)
+
+    objects = PurchaseManager()

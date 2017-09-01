@@ -7,9 +7,9 @@ from decimal import Decimal
 from rest_framework import serializers, exceptions
 from rest_framework.serializers import ModelSerializer
 from django.db import transaction
-from django.db.models import Q
 
 from ico.models import *
+from ico.exceptions import SilentException
 from ico.enums import WebhookEvent, PurchaseStatus
 from ico.authentication import HeaderAuthentication
 from rehive import Rehive, APIException
@@ -192,92 +192,13 @@ class AdminTransactionInitiateWebhookSerializer(AdminWebhookSerializer):
     def create(self, validated_data):
         company = validated_data.get('company')
         data = validated_data.get('data')
-        tx_id = data.get('id')
-        status =  data.get('status')
-        currency =  data.get('currency')
 
-        # Instantiate Rehive SDK
-        rehive = Rehive(company.admin.token) 
- 
-        # Check if the transaction is already associated to any purchases.
         try:
-            Purchase.objects.get(Q(Q(deposit_tx=tx_id) | Q(token_tx=tx_id)),
-                quote__user__company=company)
-            # Simply return immediately, this transaction has been initiated
-            # already or is a token credit. Don't raise an error because 
-            # Rehive webhook will keep retrying.
+            Purchase.objects.initiate_purchase(company, data)            
+        except SilentException:
             return validated_data
-        except Purchase.DoesNotExist:
-            pass
-
-        # Check if there is an enabled ICO and the ICO has at least one phase.
-        # Exclude ICOs that have the same currency code as the transaction.
-        try:
-            ico = Ico.objects.exclude(currency__code=currency['code']).get(
-                company=company, enabled=True)
-            phase = ico.get_phase()
-        except (Ico.DoesNotExist, Phase.DoesNotExist):
-            return validated_data
-
-        # Get a currency.
-        try:
-            deposit_currency = Currency.objects.get(
-                code__iexact=currency['code'], company=company, 
-                enabled=True)  
-        except Currency.DoesNotExist:
-            raise serializers.ValidationError("Invalid currency.")   
-
-        # Get the decimal amount for deposit.
-        deposit_cent_amount = Decimal(str(data['amount']))
-        deposit_divisibility = Decimal(str(deposit_currency.divisibility))
-        deposit_amount = from_cents(deposit_cent_amount, deposit_divisibility)  
- 
-        # Get or create a user object. Always create a user just in case someone 
-        # sent currency without requesting a quote.
-        user, created = User.objects.get_or_create(
-            identifier=uuid.UUID(data['user']['identifier']).hex,
-            company=company)
-
-        # Check for matching quotes, if none exist, create one.
-        try:
-            date_from = datetime.datetime.now() - datetime.timedelta(minutes=10)
-            quote = Quote.objects.filter(user=user, 
-                deposit_amount=deposit_amount, 
-                deposit_currency=deposit_currency, 
-                phase=phase, 
-                created__gte=date_from).latest('created')
-
-        except Quote.DoesNotExist:
-            rate = Rate.objects.get(phase=phase, currency=deposit_currency)
-            token_amount = Decimal(deposit_amount / rate.rate)
-            quote = Quote.objects.create(user=user, 
-                                         phase=phase,
-                                         deposit_amount=deposit_amount, 
-                                         deposit_currency=deposit_currency,
-                                         token_amount=token_amount,
-                                         rate=rate.rate)    
-
-        # If error occurs, rollback changes and raise error so that Rehive
-        # retries (most likeley an APIException).
-        with transaction.atomic():
-            # Create ICO purchase
-            purchase = Purchase.objects.create(quote=quote, deposit_tx=tx_id,
-                status=status)
-
-            # Get token amount in cents for Rehive
-            token_divisibility = Decimal(
-                str(quote.phase.ico.currency.divisibility))
-            token_cent_amount = to_cents(quote.token_amount, token_divisibility) 
-
-            # Create asscociated token credit transaction
-            token_tx = rehive.admin.transactions.create_credit(
-                user=str(user.identifier),
-                amount=token_cent_amount, 
-                currency=quote.phase.ico.currency.code, 
-                confirm_on_create=False)
-
-            purchase.token_tx = token_tx['id']
-            purchase.save()    
+        except Exception:
+            raise
 
         return validated_data
 
@@ -307,33 +228,13 @@ class AdminTransactionExecuteWebhookSerializer(AdminWebhookSerializer):
     def create(self, validated_data):
         company = validated_data.get('company')
         data = validated_data.get('data')
-        tx_id = data.get('id')
-        status =  data.get('status')
 
-        # Instantiate Rehive SDK
-        rehive = Rehive(company.admin.token) 
-
-        # Check if the transaction is associated to any pending purchases.
-        # Ensure it is associated by only the deposit_tx.
         try:
-            purchase = Purchase.objects.exclude(token_tx__isnull=True).get(
-                deposit_tx=tx_id,
-                status=PurchaseStatus.PENDING,
-                quote__user__company=company)
-        except Purchase.DoesNotExist:
-            # Simply return immediately, this isn't a relevant transaction.
-            # Don't raise an error otherwise Rehive webhook will keep retrying.
+            Purchase.objects.execute_purchase(company, data)            
+        except SilentException:
             return validated_data
-
-        # If error occurs, rollback changes and raise error so that Rehive
-        # retries (most likeley an APIException).
-        with transaction.atomic():
-            # Update ICO purchase status.
-            purchase.status = status
-            purchase.save()
-
-            # Update associated Rehive transaction.
-            rehive.admin.transactions.patch(purchase.token_tx, status)
+        except Exception:
+            raise
 
         return validated_data
 
