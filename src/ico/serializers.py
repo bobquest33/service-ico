@@ -351,17 +351,22 @@ class AdminIcoSerializer(serializers.ModelSerializer, DatesMixin):
     currency = AdminCurrencySerializer(read_only=True)
     base_currency = AdminCurrencySerializer(read_only=True)
     amount = serializers.SerializerMethodField()
+    amount_remaining = serializers.SerializerMethodField()
     base_goal_amount = serializers.SerializerMethodField()
 
     class Meta:
         model = Ico
-        fields = ('id', 'currency', 'amount', 'exchange_provider', 'base_currency',
-            'base_goal_amount', 'enabled', 'created', 'updated')
-        read_only_fields = ('id', 'currency', 'amount', 'base_currency',
-            'base_goal_amount', 'created', 'updated')
+        fields = ('id', 'currency', 'amount', 'amount_remaining', 
+            'exchange_provider', 'base_currency', 'base_goal_amount', 
+            'enabled', 'created', 'updated')
+        read_only_fields = ('id', 'currency', 'amount', 'amount_remaining', 
+            'base_currency', 'base_goal_amount', 'created', 'updated')
 
     def get_amount(self, obj):
         return to_cents(obj.amount, obj.currency.divisibility)
+
+    def get_amount_remaining(self, obj):
+        return to_cents(obj.amount_remaining, obj.currency.divisibility)
 
     def get_base_goal_amount(self, obj):
         return to_cents(obj.base_goal_amount, obj.base_currency.divisibility)
@@ -498,13 +503,19 @@ class UserIcoSerializer(serializers.ModelSerializer):
 
     currency = AdminCurrencySerializer(read_only=True)
     base_currency = AdminCurrencySerializer(read_only=True)
+    amount = serializers.SerializerMethodField()
+    amount_remaining = serializers.SerializerMethodField()
 
     class Meta:
         model = Ico
-        fields = ('id', 'currency', 'amount', 'base_currency', 'enabled')
+        fields = ('id', 'currency', 'amount', 'amount_remaining', 
+            'base_currency', 'enabled')
 
-    def get_base_goal_amount(self, obj):
-        return to_cents(obj.base_goal_amount, obj.base_currency.divisibility)
+    def get_amount(self, obj):
+        return to_cents(obj.amount, obj.currency.divisibility)
+
+    def get_amount_remaining(self, obj):
+        return to_cents(obj.amount_remaining, obj.currency.divisibility)
 
 
 class UserRateSerializer(serializers.ModelSerializer, DatesMixin):

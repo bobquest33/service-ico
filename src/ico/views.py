@@ -259,7 +259,7 @@ class AdminIcoList(ListAPIView):
 
     def get_queryset(self):
         company = self.request.user.company
-        return Ico.objects.filter(company=company)
+        return Ico.objects.filter(company=company).order_by('-created')
 
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -347,7 +347,7 @@ class AdminPhaseList(ListAPIView):
         except Ico.DoesNotExist:
             raise exceptions.NotFound()
 
-        return Phase.objects.filter(ico=ico)
+        return Phase.objects.filter(ico=ico).order_by('level')
 
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -469,7 +469,7 @@ class AdminQuoteList(ListAPIView):
         except Ico.DoesNotExist:
             raise exceptions.NotFound()
 
-        return Quote.objects.filter(phase__ico=ico)
+        return Quote.objects.filter(phase__ico=ico).order_by('-created')
 
 
 class AdminQuoteView(GenericAPIView):
@@ -513,7 +513,8 @@ class AdminPurchaseList(ListAPIView):
         ico_id = self.kwargs['ico_id']
 
         try:
-            ico = Ico.objects.get(company=company, id=ico_id)
+            ico = Ico.objects.get(company=company, id=ico_id).order_by(
+                '-created')
         except Ico.DoesNotExist:
             raise exceptions.NotFound()
 
@@ -575,7 +576,8 @@ class UserIcoView(GenericAPIView):
         ico_id = kwargs['ico_id']
 
         try:
-            ico = Ico.objects.get(company=company, id=ico_id)
+            ico = Ico.objects.get(company=company, id=ico_id).order_by(
+                '-created')
         except Ico.DoesNotExist:
             raise exceptions.NotFound()
 
@@ -663,7 +665,8 @@ class UserQuoteList(ListAPIView):
         except Ico.DoesNotExist:
             raise exceptions.NotFound()
 
-        return Quote.objects.filter(user=user, phase__ico=ico)
+        return Quote.objects.filter(user=user, phase__ico=ico).order_by(
+            '-created')
 
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -720,7 +723,8 @@ class UserPurchaseList(ListAPIView):
         except Ico.DoesNotExist:
             raise exceptions.NotFound()
 
-        return Purchase.objects.filter(quote__user=user, quote__phase__ico=ico)
+        return Purchase.objects.filter(quote__user=user, quote__phase__ico=ico
+            ).order_by('-created')
 
 
 class UserPurchaseView(GenericAPIView):

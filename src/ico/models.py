@@ -11,7 +11,7 @@ from django.db import transaction
 from rest_framework.exceptions import ValidationError
 from rehive import Rehive
 
-from ico.exceptions import SilentException
+from ico.exceptions import SilentException, BalanceException
 from ico.enums import PurchaseStatus
 from ico.rates import get_crypto_rates, get_fiat_rates
 from ico.utils.common import (
@@ -96,6 +96,7 @@ class Currency(DateModel):
 class Ico(DateModel):
     company = models.ForeignKey('ico.Company')
     amount = MoneyField(default=Decimal(0))
+    amount_remaining = MoneyField(default=Decimal(0))
     currency = models.ForeignKey('ico.Currency', related_name='ico')
     exchange_provider = models.CharField(max_length=200, null=True, blank=True)
     base_currency = models.ForeignKey('ico.Currency', null=True, related_name='ico_base')  # Base fiat currency for conversion rates, should be unchangable
@@ -103,6 +104,10 @@ class Ico(DateModel):
     enabled = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):
+        # Set initial balance for the ICO.
+        if not self.id:
+            self.amount_remaining = self.amount
+
         if self.enabled:
             Ico.objects.filter(company=self.company, enabled=True).update(
                 enabled=False)
@@ -113,27 +118,24 @@ class Ico(DateModel):
         return str(self.currency) + "_" + str(self.company)
 
     def get_phase(self):
-        amount_sold = self.get_amount_sold()
-
-        if amount_sold < self.amount:
-            percent = (amount_sold / self.amount) * 100
+        if self.amount_remaining > 0:
+            # Percent already sold.
+            perc = ((self.amount - self.amount_remaining) / self.amount) * 100
 
             for phase in Phase.objects.filter(ico=self).order_by('level'):
-                if percent < phase.percentage:
+                if perc < phase.percentage:
                     return phase
                 else:
-                    percent = percent - phase.percentage
+                    perc = perc - phase.percentage
 
         raise Phase.DoesNotExist
 
-    def get_amount_sold(self):
-        statuses = (PurchaseStatus.PENDING, PurchaseStatus.COMPLETE,)
+    def deduct_amount(self, amount):
+        if (self.amount_remaining - amount) < 0:
+            raise BalanceException
 
-        purchases = Purchase.objects.filter(quote__phase__ico=self, 
-            status__in=statuses).aggregate(
-                total_amount=Coalesce(models.Sum('quote__token_amount'), 0))
-
-        return purchases['total_amount']
+        self.amount_remaining = self.amount_remaining - amount
+        self.save()
 
 
 class Phase(DateModel):
@@ -301,6 +303,8 @@ class PurchaseManager(models.Manager):
         except Purchase.DoesNotExist:
             pass
 
+        print("asd")
+
         # Check if there is an enabled ICO and the ICO has at least one phase.
         # Exclude ICO instances that have the same currency code as the received
         # transaction.
@@ -310,6 +314,9 @@ class PurchaseManager(models.Manager):
             phase = ico.get_phase()
         except (Ico.DoesNotExist, Phase.DoesNotExist):
             raise SilentException
+
+
+        print("asd")
 
         # Get currency details.
         deposit_currency = Currency.objects.get(
@@ -346,6 +353,8 @@ class PurchaseManager(models.Manager):
                                          token_amount=token_amount,
                                          rate=rate.rate)
 
+        print("asd")
+
         return self.create_purchase(quote, tx_id, status)
 
     def execute_purchase(self, company, data):
@@ -353,7 +362,7 @@ class PurchaseManager(models.Manager):
         Execute a purchase with a new status (complte/fail) the transaction.
 
         Uncaught exceptions will cause retries in the Rehive webhook logic, in
-        order to not cause a retry, there is a SilentException whic will still
+        order to not cause a retry, there is a SilentException which will still
         return a 200 OK status.
         """
 
@@ -388,10 +397,14 @@ class PurchaseManager(models.Manager):
         purchase = self.create(quote=quote, deposit_tx=tx_id,
             status=status)
 
+        print("dsa")
+
         # Get token amount in cents for Rehive.
         token_divisibility = Decimal(
             str(quote.phase.ico.currency.divisibility))
-        token_cent_amount = to_cents(quote.token_amount, token_divisibility) 
+        token_cent_amount = to_cents(quote.token_amount, token_divisibility)
+
+        print("dsa")
 
         # Create asscociated token credit transaction.
         token_tx = rehive.admin.transactions.create_credit(
@@ -403,7 +416,7 @@ class PurchaseManager(models.Manager):
         purchase.token_tx = token_tx['id']
         purchase.save()
 
-        print(purchase)
+        print("dsa")
 
         return purchase    
 
@@ -411,14 +424,26 @@ class PurchaseManager(models.Manager):
     def update_purchase(self, purchase, status):
         rehive = Rehive(purchase.quote.user.company.admin.token) 
 
-        # Update ICO purchase status.
-        purchase.status = status
-        purchase.save()
+        with transaction.atomic():
+            purchase._lock_ico()
 
-        # Update associated Rehive transaction.
-        rehive.admin.transactions.patch(purchase.token_tx, status)
- 
-        return purchase
+            if status == "Complete":
+                try:
+                    # Attempt to deduct the purchase amount.
+                    purchase.quote.phase.ico.deduct_amount(
+                        purchase.quote.token_amount)
+                    purchase.quote.phase.ico.save()
+                except BalanceException:
+                    # The token transaction should be failed.
+                    status == "Failed"
+
+            purchase.status = status
+            purchase.save()
+
+            # Update associated Rehive transaction.
+            rehive.admin.transactions.patch(purchase.token_tx, status)
+     
+            return purchase
 
 
 class Purchase(DateModel):
@@ -428,3 +453,14 @@ class Purchase(DateModel):
     status = EnumField(PurchaseStatus, max_length=50)
 
     objects = PurchaseManager()
+
+    def _lock_ico(self):
+        """Locks a transaction's ICO for concurrent balance changes.
+
+        This should always be called first before any balance modifying methods
+        are invoked.
+        """
+
+        self.quote.phase.ico = Ico.objects.\
+            select_for_update().get(id=self.quote.phase.ico.id)
+
