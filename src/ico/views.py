@@ -513,12 +513,12 @@ class AdminPurchaseList(ListAPIView):
         ico_id = self.kwargs['ico_id']
 
         try:
-            ico = Ico.objects.get(company=company, id=ico_id).order_by(
-                '-created')
+            ico = Ico.objects.get(company=company, id=ico_id)
         except Ico.DoesNotExist:
             raise exceptions.NotFound()
 
-        return Purchase.objects.filter(quote__phase__ico=ico)
+        return Purchase.objects.filter(quote__phase__ico=ico).order_by(
+                '-created')
 
 
 class AdminPurchaseView(GenericAPIView):
@@ -576,8 +576,7 @@ class UserIcoView(GenericAPIView):
         ico_id = kwargs['ico_id']
 
         try:
-            ico = Ico.objects.get(company=company, id=ico_id).order_by(
-                '-created')
+            ico = Ico.objects.get(company=company, id=ico_id)
         except Ico.DoesNotExist:
             raise exceptions.NotFound()
 

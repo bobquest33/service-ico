@@ -484,16 +484,25 @@ class AdminQuoteSerializer(serializers.ModelSerializer, DatesMixin):
         return to_cents(obj.rate, obj.deposit_currency.divisibility)
 
 
+class PurchaseMessageSerializer(serializers.ModelSerializer, DatesMixin):
+    message = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = PurchaseMessage
+        fields = ('message', 'created',)
+
+
 class AdminPurchaseSerializer(serializers.ModelSerializer, DatesMixin):
     quote = AdminQuoteSerializer(read_only=True)
     phase = serializers.IntegerField(source='quote.phase.level')
     status = serializers.ChoiceField(choices=PurchaseStatus.choices(),
         source='status.value')
+    messages = PurchaseMessageSerializer(many=True, read_only=True)
 
     class Meta:
         model = Purchase
         fields = ('id', 'quote', 'phase', 'deposit_tx', 'token_tx', 'status',
-                  'created', 'updated')
+                  'messages', 'created', 'updated')
 
 
 class UserIcoSerializer(serializers.ModelSerializer):
@@ -637,7 +646,7 @@ class UserQuoteSerializer(serializers.ModelSerializer, DatesMixin):
     class Meta:
         model = Quote
         fields = ('id', 'phase', 'deposit_amount', 'deposit_currency', 
-            'token_amount', 'token_currency', 'rate', 'created', 'updated')
+            'token_amount', 'token_currency', 'rate', 'created', 'updated',)
 
     def get_deposit_amount(self, obj):
         return to_cents(obj.deposit_amount, obj.deposit_currency.divisibility)
@@ -653,8 +662,9 @@ class UserPurchaseSerializer(serializers.ModelSerializer, DatesMixin):
     quote = UserQuoteSerializer(read_only=True)
     status = serializers.ChoiceField(choices=PurchaseStatus.choices(),
         source='status.value')
+    messages = PurchaseMessageSerializer(many=True, read_only=True)
 
     class Meta:
         model = Purchase
-        fields = ('id', 'quote', 'deposit_tx', 'token_tx', 'status',
-                  'created', 'updated')
+        fields = ('id', 'quote', 'deposit_tx', 'token_tx', 'status', 'messages',
+                  'created', 'updated',)

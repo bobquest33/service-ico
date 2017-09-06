@@ -132,7 +132,7 @@ class Ico(DateModel):
 
     def deduct_amount(self, amount):
         if (self.amount_remaining - amount) < 0:
-            raise BalanceException
+            raise BalanceException("All ICO tokens have been sold.")
 
         self.amount_remaining = self.amount_remaining - amount
         self.save()
@@ -279,6 +279,12 @@ class Quote(DateModel):
         return super(Quote, self).save(*args, **kwargs)
 
 
+class PurchaseMessage(DateModel):
+    purchase = models.ForeignKey('ico.Purchase', related_name="messages")
+    message = models.CharField(max_length=300)
+    exception = models.CharField(max_length=300, null=True, blank=True)
+
+
 class PurchaseManager(models.Manager):
 
     def initiate_purchase(self, company, data):
@@ -303,8 +309,6 @@ class PurchaseManager(models.Manager):
         except Purchase.DoesNotExist:
             pass
 
-        print("asd")
-
         # Check if there is an enabled ICO and the ICO has at least one phase.
         # Exclude ICO instances that have the same currency code as the received
         # transaction.
@@ -314,9 +318,6 @@ class PurchaseManager(models.Manager):
             phase = ico.get_phase()
         except (Ico.DoesNotExist, Phase.DoesNotExist):
             raise SilentException
-
-
-        print("asd")
 
         # Get currency details.
         deposit_currency = Currency.objects.get(
@@ -353,13 +354,11 @@ class PurchaseManager(models.Manager):
                                          token_amount=token_amount,
                                          rate=rate.rate)
 
-        print("asd")
-
         return self.create_purchase(quote, tx_id, status)
 
     def execute_purchase(self, company, data):
         """
-        Execute a purchase with a new status (complte/fail) the transaction.
+        Execute a purchase with a new status (complete/fail) the transaction.
 
         Uncaught exceptions will cause retries in the Rehive webhook logic, in
         order to not cause a retry, there is a SilentException which will still
@@ -397,14 +396,11 @@ class PurchaseManager(models.Manager):
         purchase = self.create(quote=quote, deposit_tx=tx_id,
             status=status)
 
-        print("dsa")
-
         # Get token amount in cents for Rehive.
         token_divisibility = Decimal(
             str(quote.phase.ico.currency.divisibility))
-        token_cent_amount = to_cents(quote.token_amount, token_divisibility)
-
-        print("dsa")
+        token_cent_amount = to_cents(
+            quote.token_amount, token_divisibility)
 
         # Create asscociated token credit transaction.
         token_tx = rehive.admin.transactions.create_credit(
@@ -416,34 +412,38 @@ class PurchaseManager(models.Manager):
         purchase.token_tx = token_tx['id']
         purchase.save()
 
-        print("dsa")
+        return purchase  
 
-        return purchase    
-
-    @transaction.atomic()
     def update_purchase(self, purchase, status):
-        rehive = Rehive(purchase.quote.user.company.admin.token) 
+        try:
+            rehive = Rehive(purchase.quote.user.company.admin.token) 
 
-        with transaction.atomic():
-            purchase._lock_ico()
+            with transaction.atomic():
+                purchase.lock_ico()
 
-            if status == "Complete":
-                try:
-                    # Attempt to deduct the purchase amount.
-                    purchase.quote.phase.ico.deduct_amount(
-                        purchase.quote.token_amount)
-                    purchase.quote.phase.ico.save()
-                except BalanceException:
-                    # The token transaction should be failed.
-                    status == "Failed"
+                if status == "Complete":
+                    try:
+                        # Attempt to deduct the purchase amount.
+                        purchase.quote.phase.ico.deduct_amount(
+                            purchase.quote.token_amount)
+                    except BalanceException as exc:
+                        # Log balance exception and change the status to Failed.
+                        purchase.log_message(exc)
+                        status == "Failed"
 
-            purchase.status = status
-            purchase.save()
+                # Update the transaction based on the status.
+                purchase.status = status
+                purchase.save()
 
-            # Update associated Rehive transaction.
-            rehive.admin.transactions.patch(purchase.token_tx, status)
-     
-            return purchase
+                # Update associated Rehive transaction.
+                rehive.admin.transactions.patch(purchase.token_tx, status)
+
+                return purchase
+
+        except Exception as exc:
+            # log general exceptions before re-raising the exception.
+            purchase.log_message(exc)
+            raise exc
 
 
 class Purchase(DateModel):
@@ -454,7 +454,7 @@ class Purchase(DateModel):
 
     objects = PurchaseManager()
 
-    def _lock_ico(self):
+    def lock_ico(self):
         """Locks a transaction's ICO for concurrent balance changes.
 
         This should always be called first before any balance modifying methods
@@ -464,3 +464,26 @@ class Purchase(DateModel):
         self.quote.phase.ico = Ico.objects.\
             select_for_update().get(id=self.quote.phase.ico.id)
 
+    def log_message(self, msg):
+        """
+        Utility method to log a message for a specific transaction. Only an
+        exception/string is required.
+        """
+
+        # Truncate message and convert to string (300 chars in total).
+        string_msg = (msg[:297] + '...') if len(str(msg)) > 300 else str(msg)
+
+        message = {}
+        message['purchase'] = self
+        message['message'] = string_msg
+
+        if isinstance(msg, BalanceException):
+            message['exception'] = string_msg
+
+        elif not isinstance(msg, str):
+            message['message'] = "A server error occurred."
+            message['exception'] = string_msg
+
+        logger.info(string_msg)
+
+        PurchaseMessage.objects.create(**message)
