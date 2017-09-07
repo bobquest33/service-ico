@@ -8,6 +8,7 @@ from django.db.models import Q
 from django.utils.timezone import utc
 from django.db.models.functions import Coalesce
 from django.db import transaction
+from django.contrib.postgres.fields import JSONField
 from rest_framework.exceptions import ValidationError
 from rehive import Rehive
 
@@ -299,6 +300,7 @@ class PurchaseManager(models.Manager):
         tx_id = data.get('id')
         status =  data.get('status')
         currency =  data.get('currency')
+        metadata =  data.get('metadata')
 
         # Check if the transaction is already associated to any purchases.
         # This silently fails already initiated/executed transactions.
@@ -354,7 +356,7 @@ class PurchaseManager(models.Manager):
                                          token_amount=token_amount,
                                          rate=rate.rate)
 
-        return self.create_purchase(quote, tx_id, status)
+        return self.create_purchase(quote, tx_id, status, metadata)
 
     def execute_purchase(self, company, data):
         """
@@ -389,12 +391,12 @@ class PurchaseManager(models.Manager):
         return self.update_purchase(purchase, status)
 
     @transaction.atomic()
-    def create_purchase(self, quote, tx_id, status):
+    def create_purchase(self, quote, tx_id, status, metadata):
         rehive = Rehive(quote.user.company.admin.token)
 
         # Create ICO purchase.
         purchase = self.create(quote=quote, deposit_tx=tx_id,
-            status=status)
+            status=status, metadata=metadata)
 
         # Get token amount in cents for Rehive.
         token_divisibility = Decimal(
@@ -405,8 +407,8 @@ class PurchaseManager(models.Manager):
         # Create asscociated token credit transaction.
         token_tx = rehive.admin.transactions.create_credit(
             user=str(quote.user.identifier),
-            amount=token_cent_amount, 
-            currency=quote.phase.ico.currency.code, 
+            amount=token_cent_amount,
+            currency=quote.phase.ico.currency.code,
             confirm_on_create=False)
 
         purchase.token_tx = token_tx['id']
@@ -450,12 +452,14 @@ class Purchase(DateModel):
     quote = models.ForeignKey('ico.Quote')
     deposit_tx = models.CharField(unique=True, max_length=200, null=True)
     token_tx = models.CharField(unique=True, max_length=200, null=True)
+    metadata = JSONField(null=True, blank=True, default=dict)
     status = EnumField(PurchaseStatus, max_length=50)
 
     objects = PurchaseManager()
 
     def lock_ico(self):
-        """Locks a transaction's ICO for concurrent balance changes.
+        """
+        Locks a transaction's ICO for concurrent balance changes.
 
         This should always be called first before any balance modifying methods
         are invoked.
