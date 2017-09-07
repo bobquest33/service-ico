@@ -12,7 +12,7 @@ from django.contrib.postgres.fields import JSONField
 from rest_framework.exceptions import ValidationError
 from rehive import Rehive
 
-from ico.exceptions import SilentException, BalanceException
+from ico.exceptions import SilentException, PurchaseException
 from ico.enums import PurchaseStatus
 from ico.rates import get_crypto_rates, get_fiat_rates
 from ico.utils.common import (
@@ -78,7 +78,7 @@ class User(DateModel):
     company = models.ForeignKey('ico.Company', null=True)
 
     def __str__(self):
-        return str(self.identifier)
+        return str(self.identifier) 
 
 
 class Currency(DateModel):
@@ -102,6 +102,9 @@ class Ico(DateModel):
     exchange_provider = models.CharField(max_length=200, null=True, blank=True)
     base_currency = models.ForeignKey('ico.Currency', null=True, related_name='ico_base')  # Base fiat currency for conversion rates, should be unchangable
     base_goal_amount = MoneyField(default=Decimal(0))  # Goal in base fiat currency, should be unchangable
+    min_purchase_amount = MoneyField(null=True)
+    max_purchase_amount = MoneyField(null=True)
+    max_purchases = models.IntegerField(default=10)
     enabled = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):
@@ -133,7 +136,7 @@ class Ico(DateModel):
 
     def deduct_amount(self, amount):
         if (self.amount_remaining - amount) < 0:
-            raise BalanceException("All ICO tokens have been sold.")
+            raise PurchaseException("All ICO tokens have been sold.")
 
         self.amount_remaining = self.amount_remaining - amount
         self.save()
@@ -307,6 +310,8 @@ class PurchaseManager(models.Manager):
         try:
             self.get(Q(Q(deposit_tx=tx_id) | Q(token_tx=tx_id)),
                 quote__user__company=company)
+            logger.exception(
+                "Received already initiated transaction: {}".format(tx_id))
             raise SilentException
         except Purchase.DoesNotExist:
             pass
@@ -383,10 +388,15 @@ class PurchaseManager(models.Manager):
 
         # Try to find an existing purchase with the same deposit_tx as the 
         # transaction received in the webhook.
-        purchase = self.exclude(token_tx__isnull=True).get(
-            deposit_tx=tx_id,
-            status=PurchaseStatus.PENDING,
-            quote__user__company=company)
+        try:
+            purchase = self.exclude(token_tx__isnull=True).get(
+                deposit_tx=tx_id,
+                status=PurchaseStatus.PENDING,
+                quote__user__company=company)
+        except Purchase.DoestNotExist:
+            logger.exception(
+                "Purchase does not exist for transaction: {}".format(tx_id))
+            raise
 
         return self.update_purchase(purchase, status)
 
@@ -425,27 +435,53 @@ class PurchaseManager(models.Manager):
 
                 if status == "Complete":
                     try:
-                        # Attempt to deduct the purchase amount.
+                        # Final verification of purchase.
+                        self.verify_purchase(purchase)
+
+                        # Deduct amount.
                         purchase.quote.phase.ico.deduct_amount(
                             purchase.quote.token_amount)
-                    except BalanceException as exc:
-                        # Log balance exception and change the status to Failed.
+
+                    except PurchaseException as exc:
                         purchase.log_message(exc)
-                        status == "Failed"
+                        status = "Failed"
 
                 # Update the transaction based on the status.
                 purchase.status = status
                 purchase.save()
 
-                # Update associated Rehive transaction.
+                # Update associated Rehive token transaction.
                 rehive.admin.transactions.patch(purchase.token_tx, status)
 
                 return purchase
 
         except Exception as exc:
-            # log general exceptions before re-raising the exception.
+            # Log uncaught exceptions before re-raising the exception.
+            # Uncught exceptions may include connection errors.
             purchase.log_message(exc)
             raise exc
+
+    def verify_purchase(self, purchase):
+        ico = purchase.quote.phase.ico
+        user = purchase.quote.user
+        token_amount = purchase.quote.token_amount
+
+        total_purchases = Quote.objects.exclude(purchase=None).filter(
+            user=user, phase__ico=ico).count()
+
+        if total_purchases >= ico.max_purchases: 
+            raise PurchaseException(
+                "Reached max purchases allowed.")
+
+        if (ico.max_purchase_amount > 0
+                and token_amount > ico.max_purchase_amount):
+            raise PurchaseException(
+                "Exceeds the max purchase amount.")
+
+        if (ico.min_purchase_amount > 0
+                and token_amount < ico.min_purchase_amount):
+            raise PurchaseException(
+                "Below the min purchase amount.")
 
 
 class Purchase(DateModel):
@@ -481,13 +517,11 @@ class Purchase(DateModel):
         message['purchase'] = self
         message['message'] = string_msg
 
-        if isinstance(msg, BalanceException):
+        if isinstance(msg, PurchaseException):
             message['exception'] = string_msg
 
         elif not isinstance(msg, str):
             message['message'] = "A server error occurred."
             message['exception'] = string_msg
-
-        logger.info(string_msg)
 
         PurchaseMessage.objects.create(**message)

@@ -9,7 +9,7 @@ class SilentException(APIException):
     default_error_slug = 'silent_error'
 
 
-class BalanceException(APIException):
+class PurchaseException(APIException):
     status_code = 500
-    default_detail = 'Balance error.'
-    default_error_slug = 'balance_error'
+    default_detail = 'Purchase error.'
+    default_error_slug = 'purchase_error'

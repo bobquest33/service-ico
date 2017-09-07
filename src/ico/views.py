@@ -281,6 +281,11 @@ class AdminIcoView(GenericAPIView):
     serializer_class = AdminIcoSerializer
     authentication_classes = (AdminAuthentication,)
 
+    def get_serializer_class(self):
+        if self.request.method in ('PUT', 'PATCH'):
+            return AdminUpdateIcoSerializer
+        return super(AdminIcoView, self).get_serializer_class()
+
     def get(self, request, *args, **kwargs):
         company = request.user.company
         ico_id = kwargs['ico_id']
@@ -305,7 +310,9 @@ class AdminIcoView(GenericAPIView):
         serializer = self.get_serializer(ico, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         instance = serializer.save()
-        return Response({'status': 'success', 'data': serializer.data})
+
+        data = AdminIcoSerializer(instance, context={'request': request}).data  
+        return Response({'status': 'success', 'data': data})
 
     def delete(self, request, *args, **kwargs):
         company = request.user.company
