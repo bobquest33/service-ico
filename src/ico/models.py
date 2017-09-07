@@ -102,6 +102,9 @@ class Ico(DateModel):
     exchange_provider = models.CharField(max_length=200, null=True, blank=True)
     base_currency = models.ForeignKey('ico.Currency', null=True, related_name='ico_base')  # Base fiat currency for conversion rates, should be unchangable
     base_goal_amount = MoneyField(default=Decimal(0))  # Goal in base fiat currency, should be unchangable
+    min_purchase_amount = MoneyField(null=True)
+    max_purchase_amount = MoneyField(null=True)
+    max_purchases = models.IntegerField(default=10)
     enabled = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):

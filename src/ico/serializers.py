@@ -282,11 +282,15 @@ class AdminCreateIcoSerializer(serializers.ModelSerializer):
     currency = serializers.CharField()
     base_goal_amount = serializers.IntegerField()
     base_currency = serializers.CharField()
+    min_purchase_amount = serializers.IntegerField()
+    max_purchase_amount = serializers.IntegerField()
+    max_purchases = serializers.IntegerField()
 
     class Meta:
         model = Ico
         fields = ('currency', 'amount', 'exchange_provider', 'base_currency', 
-            'base_goal_amount', 'enabled')
+            'base_goal_amount', 'min_purchase_amount', 'max_purchase_amount',
+            'max_purchases', 'enabled')
 
     def validate_currency(self, currency):
         company = self.context['request'].user.company
@@ -309,25 +313,41 @@ class AdminCreateIcoSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data['company'] = self.context['request'].user.company
 
-        validated_data['amount'] = from_cents(
-            amount=validated_data['amount'],
-            divisibility=validated_data['currency'].divisibility)
-
-        validated_data['base_goal_amount'] = from_cents(
-            amount=validated_data['base_goal_amount'],
-            divisibility=validated_data['base_currency'].divisibility)
-
         try:
+            validated_data['amount'] = from_cents(
+                amount=validated_data['amount'],
+                divisibility=validated_data['currency'].divisibility)            
             Decimal(validated_data['amount']).quantize(Decimal(".1") ** 18)
         except decimal.InvalidOperation:
             raise serializers.ValidationError(
                 {"amount": ["Unsupported number size."]})   
 
         try:
+            validated_data['base_goal_amount'] = from_cents(
+                amount=validated_data['base_goal_amount'],
+                divisibility=validated_data['base_currency'].divisibility)
             Decimal(validated_data['base_goal_amount']).quantize(Decimal(".1") ** 18)
         except decimal.InvalidOperation:
             raise serializers.ValidationError(
                 {"base_goal_amount": ["Unsupported number size."]})   
+
+        try:
+            validated_data['min_purchase_amount'] = from_cents(
+                amount=validated_data['min_purchase_amount'],
+                divisibility=validated_data['currency'].divisibility)     
+            Decimal(validated_data['min_purchase_amount']).quantize(Decimal(".1") ** 18)
+        except decimal.InvalidOperation:
+            raise serializers.ValidationError(
+                {"min_purchase_amount": ["Unsupported number size."]})   
+
+        try:
+            validated_data['max_purchase_amount'] = from_cents(
+                amount=validated_data['max_purchase_amount'],
+                divisibility=validated_data['currency'].divisibility)     
+            Decimal(validated_data['max_purchase_amount']).quantize(Decimal(".1") ** 18)
+        except decimal.InvalidOperation:
+            raise serializers.ValidationError(
+                {"max_purchase_amount": ["Unsupported number size."]})   
 
         # TODO: Also create transaction webhooks. 
         # Use rehive sdk to create a initiate and execute webhook. 
@@ -353,12 +373,15 @@ class AdminIcoSerializer(serializers.ModelSerializer, DatesMixin):
     amount = serializers.SerializerMethodField()
     amount_remaining = serializers.SerializerMethodField()
     base_goal_amount = serializers.SerializerMethodField()
+    min_purchase_amount = serializers.SerializerMethodField()
+    max_purchase_amount = serializers.SerializerMethodField()
 
     class Meta:
         model = Ico
         fields = ('id', 'currency', 'amount', 'amount_remaining', 
-            'exchange_provider', 'base_currency', 'base_goal_amount', 
-            'enabled', 'created', 'updated')
+            'exchange_provider', 'base_currency', 'base_goal_amount',
+            'min_purchase_amount', 'max_purchase_amount',
+            'max_purchases', 'enabled', 'created', 'updated')
         read_only_fields = ('id', 'currency', 'amount', 'amount_remaining', 
             'base_currency', 'base_goal_amount', 'created', 'updated')
 
@@ -371,7 +394,38 @@ class AdminIcoSerializer(serializers.ModelSerializer, DatesMixin):
     def get_base_goal_amount(self, obj):
         return to_cents(obj.base_goal_amount, obj.base_currency.divisibility)
 
+    def get_min_purchase_amount(self, obj):
+        return to_cents(obj.min_purchase_amount, obj.currency.divisibility)
+
+    def get_max_purchase_amount(self, obj):
+        return to_cents(obj.max_purchase_amount, obj.currency.divisibility)
+
+
+class AdminUpdateIcoSerializer(AdminIcoSerializer):
+    min_purchase_amount = serializers.IntegerField()
+    max_purchase_amount = serializers.IntegerField()
+
     def update(self, instance, validated_data):
+        company = self.context['request'].user.company
+
+        try:
+            validated_data['min_purchase_amount'] = from_cents(
+                amount=validated_data['min_purchase_amount'],
+                divisibility=validated_data['currency'].divisibility)     
+            Decimal(validated_data['min_purchase_amount']).quantize(Decimal(".1") ** 18)
+        except decimal.InvalidOperation:
+            raise serializers.ValidationError(
+                {"min_purchase_amount": ["Unsupported number size."]})   
+
+        try:
+            validated_data['max_purchase_amount'] = from_cents(
+                amount=validated_data['max_purchase_amount'],
+                divisibility=validated_data['currency'].divisibility)     
+            Decimal(validated_data['max_purchase_amount']).quantize(Decimal(".1") ** 18)
+        except decimal.InvalidOperation:
+            raise serializers.ValidationError(
+                {"max_purchase_amount": ["Unsupported number size."]})   
+
         for key, value in validated_data.items():
             setattr(instance, key, value)
 
