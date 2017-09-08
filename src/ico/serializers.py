@@ -730,7 +730,7 @@ class UserCreateQuoteSerializer(serializers.ModelSerializer):
 
         if deposit_amount < from_cents(1, deposit_currency.divisibility):
             raise serializers.ValidationError(
-                {'non_field_errors': [
+                {'deposit_amount': [
                     'Deposit amount is below the min amount '
                     'of {currency} {deposit_amount}.'
                     .format(

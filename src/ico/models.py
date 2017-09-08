@@ -357,6 +357,12 @@ class PurchaseManager(models.Manager):
             # lower than the minimum allowed amount for the deposit currency
             # Silently fail the purchase so that Rehive does not keep retrying
             if deposit_amount < from_cents(1, deposit_divisibility):
+                logger.exception(
+                    'Deposit amount is below the min amount '
+                    'of {currency} {deposit_amount}.'.format(
+                        deposit_amount=from_cents(1, deposit_divisibility),
+                        currency=deposit_currency
+                    ))
                 raise SilentException
             else:
                 rate = Rate.objects.get(phase=phase, currency=deposit_currency)
