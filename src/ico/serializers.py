@@ -728,6 +728,16 @@ class UserCreateQuoteSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"token_amount": ["Amount is below the min purchase amount."]})
 
+        if deposit_amount < from_cents(1, deposit_currency.divisibility):
+            raise serializers.ValidationError(
+                {'non_field_errors': [
+                    'Deposit amount is below the min amount '
+                    'of {currency} {deposit_amount}.'
+                    .format(
+                        deposit_amount=from_cents(1, deposit_currency.divisibility),
+                        currency=deposit_currency
+                    )]})
+
         create_data = {
             "user": user,
             "phase": phase,
