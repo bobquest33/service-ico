@@ -7,6 +7,8 @@ urlpatterns = (
     url(r'^$', views.root),
     url(r'^activate/$', views.ActivateView.as_view(), name='activate'),
     url(r'^deactivate/$', views.DeactivateView.as_view(), name='deactivate'),
+    url(r'^icos/$', views.IcoList.as_view(), name='icos'),
+    url(r'^icos/(?P<ico_id>\d+)/$', views.IcoView.as_view(), name='icos-view'),
 
     url(r'^admin/webhooks/initiate/$', views.AdminTransactionInitiateWebhookView.as_view(), name='admin-webhooks-initiate'),
     url(r'^admin/webhooks/execute/$', views.AdminTransactionExecuteWebhookView.as_view(), name='admin-webhooks-execute'),

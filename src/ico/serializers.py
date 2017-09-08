@@ -240,7 +240,7 @@ class AdminTransactionExecuteWebhookSerializer(AdminWebhookSerializer):
         return validated_data
 
 
-class AdminCurrencySerializer(serializers.ModelSerializer):
+class CurrencySerializer(serializers.ModelSerializer):
     """
     Serialize currency.
     """
@@ -249,6 +249,43 @@ class AdminCurrencySerializer(serializers.ModelSerializer):
         model = Currency
         fields = ('code', 'description', 'symbol', 'unit', 'divisibility', 
             'enabled')
+
+
+class IcoSerializer(serializers.ModelSerializer, DatesMixin):
+    """
+    Serialize public ico information.
+    """
+
+    currency = CurrencySerializer()
+    base_currency = CurrencySerializer()
+    amount = serializers.SerializerMethodField()
+    company = serializers.CharField(source='company.identifier')
+    amount_remaining = serializers.SerializerMethodField()
+    base_goal_amount = serializers.SerializerMethodField()
+    min_purchase_amount = serializers.SerializerMethodField()
+    max_purchase_amount = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Ico
+        fields = ('id', 'currency', 'amount', 'amount_remaining', 
+            'base_currency', 'base_goal_amount',
+            'min_purchase_amount', 'max_purchase_amount', 'company',
+            'max_purchases', 'enabled', 'public', 'created', 'updated')
+
+    def get_amount(self, obj):
+        return to_cents(obj.amount, obj.currency.divisibility)
+
+    def get_amount_remaining(self, obj):
+        return to_cents(obj.amount_remaining, obj.currency.divisibility)
+
+    def get_base_goal_amount(self, obj):
+        return to_cents(obj.base_goal_amount, obj.base_currency.divisibility)
+
+    def get_min_purchase_amount(self, obj):
+        return to_cents(obj.min_purchase_amount, obj.currency.divisibility)
+
+    def get_max_purchase_amount(self, obj):
+        return to_cents(obj.max_purchase_amount, obj.currency.divisibility)
 
 
 class AdminCompanySerializer(serializers.ModelSerializer):
@@ -273,7 +310,7 @@ class AdminCompanySerializer(serializers.ModelSerializer):
         return instance
 
 
-class AdminCreateIcoSerializer(serializers.ModelSerializer):
+class AdminCreateIcoSerializer(IcoSerializer):
     """
     Serialize ico, create
     """
@@ -282,15 +319,15 @@ class AdminCreateIcoSerializer(serializers.ModelSerializer):
     currency = serializers.CharField()
     base_goal_amount = serializers.IntegerField()
     base_currency = serializers.CharField()
-    min_purchase_amount = serializers.IntegerField()
-    max_purchase_amount = serializers.IntegerField()
-    max_purchases = serializers.IntegerField()
+    min_purchase_amount = serializers.IntegerField(required=False)
+    max_purchase_amount = serializers.IntegerField(required=False)
+    max_purchases = serializers.IntegerField(required=False)
 
     class Meta:
         model = Ico
         fields = ('currency', 'amount', 'exchange_provider', 'base_currency', 
             'base_goal_amount', 'min_purchase_amount', 'max_purchase_amount',
-            'max_purchases', 'enabled')
+            'max_purchases', 'enabled', 'public')
 
     def validate_currency(self, currency):
         company = self.context['request'].user.company
@@ -370,8 +407,8 @@ class AdminIcoSerializer(serializers.ModelSerializer, DatesMixin):
     Serialize ico, update and delete.
     """
 
-    currency = AdminCurrencySerializer(read_only=True)
-    base_currency = AdminCurrencySerializer(read_only=True)
+    currency = CurrencySerializer(read_only=True)
+    base_currency = CurrencySerializer(read_only=True)
     amount = serializers.SerializerMethodField()
     amount_remaining = serializers.SerializerMethodField()
     base_goal_amount = serializers.SerializerMethodField()
@@ -383,7 +420,7 @@ class AdminIcoSerializer(serializers.ModelSerializer, DatesMixin):
         fields = ('id', 'currency', 'amount', 'amount_remaining', 
             'exchange_provider', 'base_currency', 'base_goal_amount',
             'min_purchase_amount', 'max_purchase_amount',
-            'max_purchases', 'enabled', 'created', 'updated')
+            'max_purchases', 'enabled', 'public', 'created', 'updated')
         read_only_fields = ('id', 'currency', 'amount', 'amount_remaining', 
             'base_currency', 'base_goal_amount', 'created', 'updated')
 
@@ -507,7 +544,7 @@ class AdminCreatePhaseSerializer(serializers.ModelSerializer):
 
 
 class AdminRateSerializer(serializers.ModelSerializer, DatesMixin):
-    currency = AdminCurrencySerializer(read_only=True)
+    currency = CurrencySerializer(read_only=True)
     rate = serializers.SerializerMethodField()
 
     class Meta:
@@ -520,7 +557,7 @@ class AdminRateSerializer(serializers.ModelSerializer, DatesMixin):
 
 class AdminQuoteSerializer(serializers.ModelSerializer, DatesMixin):
     user = serializers.CharField()
-    deposit_currency = AdminCurrencySerializer(read_only=True)
+    deposit_currency = CurrencySerializer(read_only=True)
     deposit_amount = serializers.SerializerMethodField()
     token_amount = serializers.SerializerMethodField()
     rate = serializers.SerializerMethodField()
@@ -562,30 +599,21 @@ class AdminPurchaseSerializer(serializers.ModelSerializer, DatesMixin):
                   'metadata', 'messages', 'created', 'updated')
 
 
-class UserIcoSerializer(serializers.ModelSerializer):
+class UserIcoSerializer(IcoSerializer):
     """
     Serialize ico, update and delete.
     """
 
-    currency = AdminCurrencySerializer(read_only=True)
-    base_currency = AdminCurrencySerializer(read_only=True)
-    amount = serializers.SerializerMethodField()
-    amount_remaining = serializers.SerializerMethodField()
-
     class Meta:
         model = Ico
         fields = ('id', 'currency', 'amount', 'amount_remaining', 
-            'base_currency', 'enabled')
-
-    def get_amount(self, obj):
-        return to_cents(obj.amount, obj.currency.divisibility)
-
-    def get_amount_remaining(self, obj):
-        return to_cents(obj.amount_remaining, obj.currency.divisibility)
+            'base_currency', 'base_goal_amount',
+            'min_purchase_amount', 'max_purchase_amount',
+            'max_purchases', 'enabled', 'public', 'created', 'updated')
 
 
 class UserRateSerializer(serializers.ModelSerializer, DatesMixin):
-    currency = AdminCurrencySerializer(read_only=True)
+    currency = CurrencySerializer(read_only=True)
     rate = serializers.SerializerMethodField()
 
     class Meta:
@@ -713,10 +741,10 @@ class UserCreateQuoteSerializer(serializers.ModelSerializer):
 
 
 class UserQuoteSerializer(serializers.ModelSerializer, DatesMixin):
-    deposit_currency = AdminCurrencySerializer(read_only=True)
+    deposit_currency = CurrencySerializer(read_only=True)
     deposit_amount = serializers.SerializerMethodField()
     token_amount = serializers.SerializerMethodField()
-    token_currency = AdminCurrencySerializer(read_only=True, 
+    token_currency = CurrencySerializer(read_only=True, 
         source='phase.ico.currency')
     rate = serializers.SerializerMethodField()
 

@@ -28,14 +28,20 @@ def root(request, format=None):
     """
     return Response(
         [
-            {'Admins': OrderedDict(
+            {'Public': OrderedDict(
                 [('Activate', reverse('ico:activate',
                     request=request,
                     format=format)),
                  ('Deactivate', reverse('ico:deactivate',
                     request=request,
                     format=format)),
-                 ('Initiate Webhook', reverse('ico:admin-webhooks-initiate',
+                 ('Icos', reverse('ico:icos',
+                    request=request,
+                    format=format))
+                ]
+            )},     
+            {'Admins': OrderedDict(
+                [('Initiate Webhook', reverse('ico:admin-webhooks-initiate',
                     request=request,
                     format=format)),
                  ('Execute Webhook', reverse('ico:admin-webhooks-execute',
@@ -47,13 +53,13 @@ def root(request, format=None):
                  ('Currencies', reverse('ico:admin-currencies',
                     request=request,
                     format=format)),
-                 ('Ico', reverse('ico:admin-icos',
+                 ('Icos', reverse('ico:admin-icos',
                     request=request,
                     format=format))
                 ]
             )},
             {'Users': OrderedDict(
-                [('Ico', reverse('ico:user-icos',
+                [('Icos', reverse('ico:user-icos',
                     request=request,
                     format=format))
                 ]
@@ -139,6 +145,43 @@ class DeactivateView(GenericAPIView):
         return Response({'status': 'success'})
 
 
+class IcoList(ListAPIView):
+    """
+    List public ICOs
+    """
+
+    allowed_methods = ('GET',)
+    permission_classes = (AllowAny, )
+    pagination_class = ResultsSetPagination
+    serializer_class = IcoSerializer
+    filter_backends = (filters.DjangoFilterBackend,)
+    filter_fields = ('id', 'enabled', 'company__identifier', 'currency__code',)
+
+    def get_queryset(self):
+        return Ico.objects.filter(public=True)
+
+
+class IcoView(GenericAPIView):
+    """
+    View public ICOs.
+    """
+
+    allowed_methods = ('GET',)
+    permission_classes = (AllowAny, )
+    serializer_class = IcoSerializer
+
+    def get(self, request, *args, **kwargs):
+        ico_id = kwargs['ico_id']
+
+        try:
+            ico = Ico.objects.get(public=True, id=ico_id)
+        except Ico.DoesNotExist:
+            raise exceptions.NotFound()
+
+        serializer = self.get_serializer(ico)
+        return Response({'status': 'success', 'data': serializer.data})
+
+
 class AdminTransactionInitiateWebhookView(GenericAPIView):
     """
     Receive a initiate webhook event. Authenticates requests using a secret in 
@@ -203,7 +246,7 @@ class AdminCurrencyList(ListAPIView):
 
     allowed_methods = ('GET',)
     pagination_class = ResultsSetPagination
-    serializer_class = AdminCurrencySerializer
+    serializer_class = CurrencySerializer
     authentication_classes = (AdminAuthentication,)
     filter_backends = (filters.DjangoFilterBackend,)
     filter_fields = ('code',)
@@ -224,7 +267,7 @@ class AdminCurrencyView(GenericAPIView):
     """
 
     allowed_methods = ('GET',)
-    serializer_class = AdminCurrencySerializer
+    serializer_class = CurrencySerializer
     authentication_classes = (AdminAuthentication,)
 
     def get(self, request, *args, **kwargs):
