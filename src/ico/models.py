@@ -106,6 +106,7 @@ class Ico(DateModel):
     max_purchase_amount = MoneyField(null=True)
     max_purchases = models.IntegerField(default=10)
     enabled = models.BooleanField(default=False)
+    public = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):
         # Set initial balance for the ICO.
