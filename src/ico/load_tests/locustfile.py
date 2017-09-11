@@ -53,16 +53,17 @@ class NewDepositUser(TaskSet):
         The deposit amount should be fine for either
         """
         random_num = random.randint(0, 1)
+        random_deposit = random.randint(10000, 1000000)
         currency = "XBT"
         if (random_num == 0):
             currency = "ETH"
         data = {
-            "deposit_amount": "1000000",
+            "deposit_amount": "10000",
             "deposit_currency": currency
         }
-        print(data)
+        # print(data)
         response = self.client.post(
-            "https://ico.s.services.rehive.io/api/user/icos/51/quotes/",
+            "https://ico.s.services.rehive.io/api/user/icos/69/quotes/",
             headers=self.get_headers(),
             data=data
         )
