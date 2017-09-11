@@ -18,3 +18,4 @@ class PurchaseStatus(Enum):
     PENDING = 'Pending'
     COMPLETE = 'Complete'
     FAILED = 'Failed'
+    DELETED = 'Deleted'
