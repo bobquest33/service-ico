@@ -94,6 +94,13 @@ class Currency(DateModel):
         return str(self.code)
 
 
+class IcoManager(models.Manager):
+    def get_queryset(self):
+        return super(IcoManager, self)\
+            .get_queryset()\
+            .filter(deleted=False)
+
+
 class Ico(DateModel):
     company = models.ForeignKey('ico.Company')
     amount = MoneyField(default=Decimal(0))
@@ -107,6 +114,10 @@ class Ico(DateModel):
     max_purchases = models.IntegerField(default=10)
     enabled = models.BooleanField(default=False)
     public = models.BooleanField(default=False)
+    deleted = models.BooleanField(default=False)
+
+    objects = IcoManager()
+    all_objects = models.Manager()
 
     def save(self, *args, **kwargs):
         # Set initial balance for the ICO.
@@ -143,11 +154,22 @@ class Ico(DateModel):
         self.save()
 
 
+class PhaseManager(models.Manager):
+    def get_queryset(self):
+        return super(PhaseManager, self)\
+            .get_queryset()\
+            .filter(deleted=False)
+
+
 class Phase(DateModel):
     ico = models.ForeignKey('ico.Ico')
     level = models.IntegerField()
     percentage = models.IntegerField(default=100)
     base_rate = MoneyField(default=Decimal(0))
+    deleted = models.BooleanField(default=False)
+
+    objects = PhaseManager()
+    all_objects = models.Manager()
 
     def __str__(self):
         return str(self.level)

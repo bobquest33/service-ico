@@ -441,7 +441,8 @@ class AdminIcoSerializer(serializers.ModelSerializer, DatesMixin):
 
     def delete(self):
         instance = self.instance
-        instance.delete()
+        instance.deleted = True
+        instance.save()
 
 
 class AdminUpdateIcoSerializer(AdminIcoSerializer):
@@ -495,7 +496,8 @@ class AdminPhaseSerializer(serializers.ModelSerializer):
 
     def delete(self):
         instance = self.instance
-        instance.delete()
+        instance.deleted = True
+        instance.save()
 
 
 class AdminCreatePhaseSerializer(serializers.ModelSerializer):
