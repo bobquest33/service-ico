@@ -298,7 +298,8 @@ class Quote(DateModel):
     def save(self, *args, **kwargs):
         # Delete all previous quotes for the same currency and phase.
         if not self.id:
-            Quote.objects.filter(phase=self.phase, 
+            Quote.objects.filter(user=self.user,
+                phase=self.phase, 
                 deposit_amount=self.deposit_amount,
                 deposit_currency=self.deposit_currency,
                 purchase=None).delete()
