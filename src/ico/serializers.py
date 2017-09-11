@@ -1,18 +1,21 @@
 import json
 import uuid
 import datetime
+import decimal
+from decimal import Decimal
 
 from rest_framework import serializers, exceptions
 from rest_framework.serializers import ModelSerializer
 from django.db import transaction
-from django.db.models import Q
+from django.core.exceptions import ObjectDoesNotExist
 
 from ico.models import *
+from ico.exceptions import SilentException
 from ico.enums import WebhookEvent, PurchaseStatus
 from ico.authentication import HeaderAuthentication
 from rehive import Rehive, APIException
 from ico.utils.common import (
-    to_cents, from_cents, quantize
+    to_cents, from_cents
 )
 
 from logging import getLogger
@@ -190,92 +193,13 @@ class AdminTransactionInitiateWebhookSerializer(AdminWebhookSerializer):
     def create(self, validated_data):
         company = validated_data.get('company')
         data = validated_data.get('data')
-        tx_id = data.get('id')
-        status =  data.get('status')
-        currency =  data.get('currency')
 
-        # Instantiate Rehive SDK
-        rehive = Rehive(company.admin.token) 
- 
-        # Check if the transaction is already associated to any purchases.
         try:
-            Purchase.objects.get(Q(Q(deposit_tx=tx_id) | Q(token_tx=tx_id)),
-                quote__user__company=company)
-            # Simply return immediately, this transaction has been initiated
-            # already or is a token credit. Don't raise an error because 
-            # Rehive webhook will keep retrying.
+            Purchase.objects.initiate_purchase(company, data)            
+        except SilentException:
             return validated_data
-        except Purchase.DoesNotExist:
-            pass
-
-        # Check if there is an enabled ICO and the ICO has at least one phase.
-        # Exclude ICOs that have the same currency code as the transaction.
-        try:
-            ico = Ico.objects.exclude(currency__code=currency['code']).get(
-                company=company, enabled=True)
-            phase = ico.get_phase()
-        except (Ico.DoesNotExist, Phase.DoesNotExist):
-            return validated_data
-
-        # Get a currency.
-        try:
-            deposit_currency = Currency.objects.get(
-                code__iexact=currency['code'], company=company, 
-                enabled=True)  
-        except Currency.DoesNotExist:
-            raise serializers.ValidationError("Invalid currency.")   
-
-        # Get the decimal amount for deposit.
-        deposit_cent_amount = Decimal(str(data['amount']))
-        deposit_divisibility = Decimal(str(deposit_currency.divisibility))
-        deposit_amount = from_cents(deposit_cent_amount, deposit_divisibility)  
- 
-        # Get or create a user object. Always create a user just in case someone 
-        # sent currency without requesting a quote.
-        user, created = User.objects.get_or_create(
-            identifier=uuid.UUID(data['user']['identifier']).hex,
-            company=company)
-
-        # Check for matching quotes, if none exist, create one.
-        try:
-            date_from = datetime.datetime.now() - datetime.timedelta(minutes=10)
-            quote = Quote.objects.filter(user=user, 
-                deposit_amount=deposit_amount, 
-                deposit_currency=deposit_currency, 
-                phase=phase, 
-                created__gte=date_from).latest('created')
-
-        except Quote.DoesNotExist:
-            rate = Rate.objects.get(phase=phase, currency=deposit_currency)
-            token_amount = Decimal(deposit_amount / rate.rate)
-            quote = Quote.objects.create(user=user, 
-                                         phase=phase,
-                                         deposit_amount=deposit_amount, 
-                                         deposit_currency=deposit_currency,
-                                         token_amount=token_amount,
-                                         rate=rate.rate)    
-
-        # If error occurs, rollback changes and raise error so that Rehive
-        # retries (most likeley an APIException).
-        with transaction.atomic():
-            # Create ICO purchase
-            purchase = Purchase.objects.create(quote=quote, deposit_tx=tx_id,
-                status=status)
-
-            # Get token amount in cents for Rehive
-            token_divisibility = Decimal(
-                str(quote.phase.ico.currency.divisibility))
-            token_cent_amount = to_cents(quote.token_amount, token_divisibility) 
-
-            # Create asscociated token credit transaction
-            token_tx = rehive.admin.transactions.create_credit(
-                user=str(user.identifier),
-                amount=token_cent_amount, 
-                currency=quote.phase.ico.currency.code, 
-                confirm_on_create=False)
-
-            purchase.token_tx = token_tx['id']
-            purchase.save()    
+        except ObjectDoesNotExist as exc:
+            raise serializers.ValidationError({"non_field_errors": str(exc)})
 
         return validated_data
 
@@ -305,38 +229,18 @@ class AdminTransactionExecuteWebhookSerializer(AdminWebhookSerializer):
     def create(self, validated_data):
         company = validated_data.get('company')
         data = validated_data.get('data')
-        tx_id = data.get('id')
-        status =  data.get('status')
 
-        # Instantiate Rehive SDK
-        rehive = Rehive(company.admin.token) 
-
-        # Check if the transaction is associated to any pending purchases.
-        # Ensure it is associated by only the deposit_tx.
         try:
-            purchase = Purchase.objects.exclude(token_tx__isnull=True).get(
-                deposit_tx=tx_id,
-                status=PurchaseStatus.PENDING,
-                quote__user__company=company)
-        except Purchase.DoesNotExist:
-            # Simply return immediately, this isn't a relevant transaction.
-            # Don't raise an error otherwise Rehive webhook will keep retrying.
+            Purchase.objects.execute_purchase(company, data)            
+        except SilentException:
             return validated_data
-
-        # If error occurs, rollback changes and raise error so that Rehive
-        # retries (most likeley an APIException).
-        with transaction.atomic():
-            # Update ICO purchase status.
-            purchase.status = status
-            purchase.save()
-
-            # Update associated Rehive transaction.
-            rehive.admin.transactions.patch(purchase.token_tx, status)
+        except ObjectDoesNotExist as exc:
+            raise serializers.ValidationError({"non_field_errors": str(exc)})
 
         return validated_data
 
 
-class AdminCurrencySerializer(serializers.ModelSerializer):
+class CurrencySerializer(serializers.ModelSerializer):
     """
     Serialize currency.
     """
@@ -345,6 +249,43 @@ class AdminCurrencySerializer(serializers.ModelSerializer):
         model = Currency
         fields = ('code', 'description', 'symbol', 'unit', 'divisibility', 
             'enabled')
+
+
+class IcoSerializer(serializers.ModelSerializer, DatesMixin):
+    """
+    Serialize public ico information.
+    """
+
+    currency = CurrencySerializer()
+    base_currency = CurrencySerializer()
+    amount = serializers.SerializerMethodField()
+    company = serializers.CharField(source='company.identifier')
+    amount_remaining = serializers.SerializerMethodField()
+    base_goal_amount = serializers.SerializerMethodField()
+    min_purchase_amount = serializers.SerializerMethodField()
+    max_purchase_amount = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Ico
+        fields = ('id', 'currency', 'amount', 'amount_remaining', 
+            'base_currency', 'base_goal_amount',
+            'min_purchase_amount', 'max_purchase_amount', 'company',
+            'max_purchases', 'enabled', 'public', 'created', 'updated')
+
+    def get_amount(self, obj):
+        return to_cents(obj.amount, obj.currency.divisibility)
+
+    def get_amount_remaining(self, obj):
+        return to_cents(obj.amount_remaining, obj.currency.divisibility)
+
+    def get_base_goal_amount(self, obj):
+        return to_cents(obj.base_goal_amount, obj.base_currency.divisibility)
+
+    def get_min_purchase_amount(self, obj):
+        return to_cents(obj.min_purchase_amount, obj.currency.divisibility)
+
+    def get_max_purchase_amount(self, obj):
+        return to_cents(obj.max_purchase_amount, obj.currency.divisibility)
 
 
 class AdminCompanySerializer(serializers.ModelSerializer):
@@ -369,7 +310,7 @@ class AdminCompanySerializer(serializers.ModelSerializer):
         return instance
 
 
-class AdminCreateIcoSerializer(serializers.ModelSerializer):
+class AdminCreateIcoSerializer(IcoSerializer):
     """
     Serialize ico, create
     """
@@ -378,11 +319,15 @@ class AdminCreateIcoSerializer(serializers.ModelSerializer):
     currency = serializers.CharField()
     base_goal_amount = serializers.IntegerField()
     base_currency = serializers.CharField()
+    min_purchase_amount = serializers.IntegerField(required=False)
+    max_purchase_amount = serializers.IntegerField(required=False)
+    max_purchases = serializers.IntegerField(required=False)
 
     class Meta:
         model = Ico
         fields = ('currency', 'amount', 'exchange_provider', 'base_currency', 
-            'base_goal_amount', 'enabled')
+            'base_goal_amount', 'min_purchase_amount', 'max_purchase_amount',
+            'max_purchases', 'enabled', 'public')
 
     def validate_currency(self, currency):
         company = self.context['request'].user.company
@@ -405,13 +350,43 @@ class AdminCreateIcoSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data['company'] = self.context['request'].user.company
 
-        validated_data['amount'] = from_cents(
-            amount=validated_data['amount'],
-            divisibility=validated_data['currency'].divisibility)
+        try:
+            validated_data['amount'] = from_cents(
+                amount=validated_data['amount'],
+                divisibility=validated_data['currency'].divisibility)            
+            Decimal(validated_data['amount']).quantize(Decimal(".1") ** 18)
+        except decimal.InvalidOperation:
+            raise serializers.ValidationError(
+                {"amount": ["Unsupported number size."]})   
 
-        validated_data['base_goal_amount'] = from_cents(
-            amount=validated_data['base_goal_amount'],
-            divisibility=validated_data['base_currency'].divisibility)
+        try:
+            validated_data['base_goal_amount'] = from_cents(
+                amount=validated_data['base_goal_amount'],
+                divisibility=validated_data['base_currency'].divisibility)
+            Decimal(validated_data['base_goal_amount']).quantize(Decimal(".1") ** 18)
+        except decimal.InvalidOperation:
+            raise serializers.ValidationError(
+                {"base_goal_amount": ["Unsupported number size."]})   
+
+        if validated_data.get('min_purchase_amount'):
+            try:
+                validated_data['min_purchase_amount'] = from_cents(
+                    amount=validated_data['min_purchase_amount'],
+                    divisibility=validated_data['currency'].divisibility)     
+                Decimal(validated_data['min_purchase_amount']).quantize(Decimal(".1") ** 18)
+            except decimal.InvalidOperation:
+                raise serializers.ValidationError(
+                    {"min_purchase_amount": ["Unsupported number size."]})   
+
+        if validated_data.get('max_purchase_amount'):
+            try:
+                validated_data['max_purchase_amount'] = from_cents(
+                    amount=validated_data['max_purchase_amount'],
+                    divisibility=validated_data['currency'].divisibility)     
+                Decimal(validated_data['max_purchase_amount']).quantize(Decimal(".1") ** 18)
+            except decimal.InvalidOperation:
+                raise serializers.ValidationError(
+                    {"max_purchase_amount": ["Unsupported number size."]})   
 
         # TODO: Also create transaction webhooks. 
         # Use rehive sdk to create a initiate and execute webhook. 
@@ -432,34 +407,74 @@ class AdminIcoSerializer(serializers.ModelSerializer, DatesMixin):
     Serialize ico, update and delete.
     """
 
-    currency = AdminCurrencySerializer(read_only=True)
-    base_currency = AdminCurrencySerializer(read_only=True)
+    currency = CurrencySerializer(read_only=True)
+    base_currency = CurrencySerializer(read_only=True)
     amount = serializers.SerializerMethodField()
+    amount_remaining = serializers.SerializerMethodField()
     base_goal_amount = serializers.SerializerMethodField()
+    min_purchase_amount = serializers.SerializerMethodField()
+    max_purchase_amount = serializers.SerializerMethodField()
 
     class Meta:
         model = Ico
-        fields = ('id', 'currency', 'amount', 'exchange_provider', 'base_currency',
-            'base_goal_amount', 'enabled', 'created', 'updated')
-        read_only_fields = ('id', 'currency', 'amount', 'base_currency',
-            'base_goal_amount', 'created', 'updated')
+        fields = ('id', 'currency', 'amount', 'amount_remaining', 
+            'exchange_provider', 'base_currency', 'base_goal_amount',
+            'min_purchase_amount', 'max_purchase_amount',
+            'max_purchases', 'enabled', 'public', 'created', 'updated')
+        read_only_fields = ('id', 'currency', 'amount', 'amount_remaining', 
+            'base_currency', 'base_goal_amount', 'created', 'updated')
 
     def get_amount(self, obj):
         return to_cents(obj.amount, obj.currency.divisibility)
 
+    def get_amount_remaining(self, obj):
+        return to_cents(obj.amount_remaining, obj.currency.divisibility)
+
     def get_base_goal_amount(self, obj):
         return to_cents(obj.base_goal_amount, obj.base_currency.divisibility)
 
+    def get_min_purchase_amount(self, obj):
+        return to_cents(obj.min_purchase_amount, obj.currency.divisibility)
+
+    def get_max_purchase_amount(self, obj):
+        return to_cents(obj.max_purchase_amount, obj.currency.divisibility)
+
+    def delete(self):
+        instance = self.instance
+        instance.deleted = True
+        instance.save()
+
+
+class AdminUpdateIcoSerializer(AdminIcoSerializer):
+    min_purchase_amount = serializers.IntegerField()
+    max_purchase_amount = serializers.IntegerField()
+
     def update(self, instance, validated_data):
+        if validated_data.get('min_purchase_amount'):
+            try:
+                validated_data['min_purchase_amount'] = from_cents(
+                    amount=validated_data['min_purchase_amount'],
+                    divisibility=instance.currency.divisibility)     
+                Decimal(validated_data['min_purchase_amount']).quantize(Decimal(".1") ** 18)
+            except decimal.InvalidOperation:
+                raise serializers.ValidationError(
+                    {"min_purchase_amount": ["Unsupported number size."]})   
+
+        if validated_data.get('max_purchase_amount'):
+            try:
+                validated_data['max_purchase_amount'] = from_cents(
+                    amount=validated_data['max_purchase_amount'],
+                    divisibility=instance.currency.divisibility)     
+                Decimal(validated_data['max_purchase_amount']).quantize(Decimal(".1") ** 18)
+            except decimal.InvalidOperation:
+                raise serializers.ValidationError(
+                    {"max_purchase_amount": ["Unsupported number size."]})   
+
         for key, value in validated_data.items():
             setattr(instance, key, value)
 
         instance.save()
         return instance
-
-    def delete(self):
-        instance = self.instance
-        instance.delete()
 
 
 class AdminPhaseSerializer(serializers.ModelSerializer):
@@ -481,7 +496,8 @@ class AdminPhaseSerializer(serializers.ModelSerializer):
 
     def delete(self):
         instance = self.instance
-        instance.delete()
+        instance.deleted = True
+        instance.save()
 
 
 class AdminCreatePhaseSerializer(serializers.ModelSerializer):
@@ -507,22 +523,30 @@ class AdminCreatePhaseSerializer(serializers.ModelSerializer):
                 >= 100):
             raise serializers.ValidationError(
                 {"non_field_errors": 
-                    ["Cannoy have a higher total phase percentage than 100."]})
+                    ["Cannot have a higher total phase percentage than 100."]})
 
         validated_data['ico'] = ico
 
         return validated_data
 
     def create(self, validated_data):
-        validated_data['base_rate'] = from_cents(
+        base_rate = from_cents(
             amount=validated_data['base_rate'],
             divisibility=validated_data['ico'].base_currency.divisibility)
+
+        try:
+            Decimal(base_rate).quantize(Decimal(".1") ** 18)
+        except decimal.InvalidOperation:
+            raise serializers.ValidationError(
+                {"base_rate": ["Unsupported number size."]})  
+
+        validated_data['base_rate'] = base_rate
 
         return super(AdminCreatePhaseSerializer, self).create(validated_data)
 
 
 class AdminRateSerializer(serializers.ModelSerializer, DatesMixin):
-    currency = AdminCurrencySerializer(read_only=True)
+    currency = CurrencySerializer(read_only=True)
     rate = serializers.SerializerMethodField()
 
     class Meta:
@@ -535,7 +559,7 @@ class AdminRateSerializer(serializers.ModelSerializer, DatesMixin):
 
 class AdminQuoteSerializer(serializers.ModelSerializer, DatesMixin):
     user = serializers.CharField()
-    deposit_currency = AdminCurrencySerializer(read_only=True)
+    deposit_currency = CurrencySerializer(read_only=True)
     deposit_amount = serializers.SerializerMethodField()
     token_amount = serializers.SerializerMethodField()
     rate = serializers.SerializerMethodField()
@@ -555,36 +579,43 @@ class AdminQuoteSerializer(serializers.ModelSerializer, DatesMixin):
         return to_cents(obj.rate, obj.deposit_currency.divisibility)
 
 
+class PurchaseMessageSerializer(serializers.ModelSerializer, DatesMixin):
+    message = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = PurchaseMessage
+        fields = ('message', 'created',)
+
+
 class AdminPurchaseSerializer(serializers.ModelSerializer, DatesMixin):
     quote = AdminQuoteSerializer(read_only=True)
     phase = serializers.IntegerField(source='quote.phase.level')
     status = serializers.ChoiceField(choices=PurchaseStatus.choices(),
         source='status.value')
+    metadata = serializers.JSONField(read_only=True)
+    messages = PurchaseMessageSerializer(many=True, read_only=True)
 
     class Meta:
         model = Purchase
-        fields = ('quote', 'phase', 'deposit_tx', 'token_tx', 'status',
-                  'created', 'updated')
+        fields = ('id', 'quote', 'phase', 'deposit_tx', 'token_tx', 'status',
+                  'metadata', 'messages', 'created', 'updated')
 
 
-class UserIcoSerializer(serializers.ModelSerializer):
+class UserIcoSerializer(IcoSerializer):
     """
     Serialize ico, update and delete.
     """
 
-    currency = AdminCurrencySerializer(read_only=True)
-    base_currency = AdminCurrencySerializer(read_only=True)
-
     class Meta:
         model = Ico
-        fields = ('id', 'currency', 'amount', 'base_currency', 'enabled')
-
-    def get_base_goal_amount(self, obj):
-        return to_cents(obj.base_goal_amount, obj.base_currency.divisibility)
+        fields = ('id', 'currency', 'amount', 'amount_remaining', 
+            'base_currency', 'base_goal_amount',
+            'min_purchase_amount', 'max_purchase_amount',
+            'max_purchases', 'enabled', 'public', 'created', 'updated')
 
 
 class UserRateSerializer(serializers.ModelSerializer, DatesMixin):
-    currency = AdminCurrencySerializer(read_only=True)
+    currency = CurrencySerializer(read_only=True)
     rate = serializers.SerializerMethodField()
 
     class Meta:
@@ -651,6 +682,15 @@ class UserCreateQuoteSerializer(serializers.ModelSerializer):
 
         validated_data['phase'] = phase
 
+        # Stop quotes if max_purchases is exceeded.
+        total_purchases = user.quote_set.exclude(purchase=None).filter(
+            phase__ico=ico).count()
+
+        if total_purchases >= ico.max_purchases: 
+            raise serializers.ValidationError(
+                {"non_field_errors": 
+                    ["You have reached the max purchases allowed."]})   
+
         return validated_data       
 
     def create(self, validated_data):
@@ -679,6 +719,27 @@ class UserCreateQuoteSerializer(serializers.ModelSerializer):
                 phase.ico.currency.divisibility)
             deposit_amount = Decimal(token_amount * rate.rate)
 
+        # Final validation on amounts.
+        if (phase.ico.max_purchase_amount > 0
+                and token_amount > phase.ico.max_purchase_amount):
+            raise serializers.ValidationError(
+                {"token_amount": ["Amount exceeds the max purchase amount."]})
+
+        if (phase.ico.min_purchase_amount > 0
+                and token_amount < phase.ico.min_purchase_amount):
+            raise serializers.ValidationError(
+                {"token_amount": ["Amount is below the min purchase amount."]})
+
+        if deposit_amount < from_cents(1, deposit_currency.divisibility):
+            raise serializers.ValidationError(
+                {'deposit_amount': [
+                    'Deposit amount is below the min amount '
+                    'of {currency} {deposit_amount}.'
+                    .format(
+                        deposit_amount=from_cents(1, deposit_currency.divisibility),
+                        currency=deposit_currency
+                    )]})
+
         create_data = {
             "user": user,
             "phase": phase,
@@ -692,17 +753,17 @@ class UserCreateQuoteSerializer(serializers.ModelSerializer):
 
 
 class UserQuoteSerializer(serializers.ModelSerializer, DatesMixin):
-    deposit_currency = AdminCurrencySerializer(read_only=True)
+    deposit_currency = CurrencySerializer(read_only=True)
     deposit_amount = serializers.SerializerMethodField()
     token_amount = serializers.SerializerMethodField()
-    token_currency = AdminCurrencySerializer(read_only=True, 
+    token_currency = CurrencySerializer(read_only=True, 
         source='phase.ico.currency')
     rate = serializers.SerializerMethodField()
 
     class Meta:
         model = Quote
         fields = ('id', 'phase', 'deposit_amount', 'deposit_currency', 
-            'token_amount', 'token_currency', 'rate', 'created', 'updated')
+            'token_amount', 'token_currency', 'rate', 'created', 'updated',)
 
     def get_deposit_amount(self, obj):
         return to_cents(obj.deposit_amount, obj.deposit_currency.divisibility)
@@ -718,8 +779,10 @@ class UserPurchaseSerializer(serializers.ModelSerializer, DatesMixin):
     quote = UserQuoteSerializer(read_only=True)
     status = serializers.ChoiceField(choices=PurchaseStatus.choices(),
         source='status.value')
+    metadata = serializers.JSONField(read_only=True)
+    messages = PurchaseMessageSerializer(many=True, read_only=True)
 
     class Meta:
         model = Purchase
-        fields = ('id', 'quote', 'deposit_tx', 'token_tx', 'status',
-                  'created', 'updated')
+        fields = ('id', 'quote', 'deposit_tx', 'token_tx', 'status', 'metadata',
+            'messages', 'created', 'updated',)

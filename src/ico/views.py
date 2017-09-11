@@ -28,14 +28,20 @@ def root(request, format=None):
     """
     return Response(
         [
-            {'Admins': OrderedDict(
+            {'Public': OrderedDict(
                 [('Activate', reverse('ico:activate',
                     request=request,
                     format=format)),
                  ('Deactivate', reverse('ico:deactivate',
                     request=request,
                     format=format)),
-                 ('Initiate Webhook', reverse('ico:admin-webhooks-initiate',
+                 ('Icos', reverse('ico:icos',
+                    request=request,
+                    format=format))
+                ]
+            )},     
+            {'Admins': OrderedDict(
+                [('Initiate Webhook', reverse('ico:admin-webhooks-initiate',
                     request=request,
                     format=format)),
                  ('Execute Webhook', reverse('ico:admin-webhooks-execute',
@@ -47,13 +53,13 @@ def root(request, format=None):
                  ('Currencies', reverse('ico:admin-currencies',
                     request=request,
                     format=format)),
-                 ('Ico', reverse('ico:admin-icos',
+                 ('Icos', reverse('ico:admin-icos',
                     request=request,
                     format=format))
                 ]
             )},
             {'Users': OrderedDict(
-                [('Ico', reverse('ico:user-icos',
+                [('Icos', reverse('ico:user-icos',
                     request=request,
                     format=format))
                 ]
@@ -139,6 +145,43 @@ class DeactivateView(GenericAPIView):
         return Response({'status': 'success'})
 
 
+class IcoList(ListAPIView):
+    """
+    List public ICOs
+    """
+
+    allowed_methods = ('GET',)
+    permission_classes = (AllowAny, )
+    pagination_class = ResultsSetPagination
+    serializer_class = IcoSerializer
+    filter_backends = (filters.DjangoFilterBackend,)
+    filter_fields = ('id', 'enabled', 'company__identifier', 'currency__code',)
+
+    def get_queryset(self):
+        return Ico.objects.filter(public=True)
+
+
+class IcoView(GenericAPIView):
+    """
+    View public ICOs.
+    """
+
+    allowed_methods = ('GET',)
+    permission_classes = (AllowAny, )
+    serializer_class = IcoSerializer
+
+    def get(self, request, *args, **kwargs):
+        ico_id = kwargs['ico_id']
+
+        try:
+            ico = Ico.objects.get(public=True, id=ico_id)
+        except Ico.DoesNotExist:
+            raise exceptions.NotFound()
+
+        serializer = self.get_serializer(ico)
+        return Response({'status': 'success', 'data': serializer.data})
+
+
 class AdminTransactionInitiateWebhookView(GenericAPIView):
     """
     Receive a initiate webhook event. Authenticates requests using a secret in 
@@ -203,7 +246,7 @@ class AdminCurrencyList(ListAPIView):
 
     allowed_methods = ('GET',)
     pagination_class = ResultsSetPagination
-    serializer_class = AdminCurrencySerializer
+    serializer_class = CurrencySerializer
     authentication_classes = (AdminAuthentication,)
     filter_backends = (filters.DjangoFilterBackend,)
     filter_fields = ('code',)
@@ -224,7 +267,7 @@ class AdminCurrencyView(GenericAPIView):
     """
 
     allowed_methods = ('GET',)
-    serializer_class = AdminCurrencySerializer
+    serializer_class = CurrencySerializer
     authentication_classes = (AdminAuthentication,)
 
     def get(self, request, *args, **kwargs):
@@ -259,7 +302,7 @@ class AdminIcoList(ListAPIView):
 
     def get_queryset(self):
         company = self.request.user.company
-        return Ico.objects.filter(company=company)
+        return Ico.objects.filter(company=company).order_by('-created')
 
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -280,6 +323,11 @@ class AdminIcoView(GenericAPIView):
     allowed_methods = ('GET', 'PATCH', 'DELETE',)
     serializer_class = AdminIcoSerializer
     authentication_classes = (AdminAuthentication,)
+
+    def get_serializer_class(self):
+        if self.request.method in ('PUT', 'PATCH'):
+            return AdminUpdateIcoSerializer
+        return super(AdminIcoView, self).get_serializer_class()
 
     def get(self, request, *args, **kwargs):
         company = request.user.company
@@ -305,7 +353,9 @@ class AdminIcoView(GenericAPIView):
         serializer = self.get_serializer(ico, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         instance = serializer.save()
-        return Response({'status': 'success', 'data': serializer.data})
+
+        data = AdminIcoSerializer(instance, context={'request': request}).data  
+        return Response({'status': 'success', 'data': data})
 
     def delete(self, request, *args, **kwargs):
         company = request.user.company
@@ -347,7 +397,7 @@ class AdminPhaseList(ListAPIView):
         except Ico.DoesNotExist:
             raise exceptions.NotFound()
 
-        return Phase.objects.filter(ico=ico)
+        return Phase.objects.filter(ico=ico).order_by('level')
 
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -469,7 +519,7 @@ class AdminQuoteList(ListAPIView):
         except Ico.DoesNotExist:
             raise exceptions.NotFound()
 
-        return Quote.objects.filter(phase__ico=ico)
+        return Quote.objects.filter(phase__ico=ico).order_by('-created')
 
 
 class AdminQuoteView(GenericAPIView):
@@ -517,7 +567,8 @@ class AdminPurchaseList(ListAPIView):
         except Ico.DoesNotExist:
             raise exceptions.NotFound()
 
-        return Purchase.objects.filter(quote__phase__ico=ico)
+        return Purchase.objects.filter(quote__phase__ico=ico).order_by(
+                '-created')
 
 
 class AdminPurchaseView(GenericAPIView):
@@ -663,7 +714,8 @@ class UserQuoteList(ListAPIView):
         except Ico.DoesNotExist:
             raise exceptions.NotFound()
 
-        return Quote.objects.filter(user=user, phase__ico=ico)
+        return Quote.objects.filter(user=user, phase__ico=ico).order_by(
+            '-created')
 
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -720,7 +772,8 @@ class UserPurchaseList(ListAPIView):
         except Ico.DoesNotExist:
             raise exceptions.NotFound()
 
-        return Purchase.objects.filter(quote__user=user, quote__phase__ico=ico)
+        return Purchase.objects.filter(quote__user=user, quote__phase__ico=ico
+            ).order_by('-created')
 
 
 class UserPurchaseView(GenericAPIView):
