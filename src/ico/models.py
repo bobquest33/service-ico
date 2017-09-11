@@ -353,14 +353,27 @@ class PurchaseManager(models.Manager):
                 created__gte=date_from).latest('created')
 
         except Quote.DoesNotExist:
-            rate = Rate.objects.get(phase=phase, currency=deposit_currency)
-            token_amount = Decimal(deposit_amount / rate.rate)
-            quote = Quote.objects.create(user=user, 
-                                         phase=phase,
-                                         deposit_amount=deposit_amount, 
-                                         deposit_currency=deposit_currency,
-                                         token_amount=token_amount,
-                                         rate=rate.rate)
+            # Stop a new quote from being created if the deposit amount is
+            # lower than the minimum allowed amount for the deposit currency
+            # Silently fail the purchase so that Rehive does not keep retrying
+            if deposit_amount < from_cents(1, deposit_divisibility):
+                logger.exception(
+                    'Deposit amount is below the min amount '
+                    'of {currency} {deposit_amount}.'.format(
+                        deposit_amount=from_cents(1, deposit_divisibility),
+                        currency=deposit_currency
+                    ))
+                raise SilentException
+            else:
+                rate = Rate.objects.get(phase=phase, currency=deposit_currency)
+                token_amount = Decimal(deposit_amount / rate.rate)
+                quote = Quote.objects.create(
+                    user=user,
+                    phase=phase,
+                    deposit_amount=deposit_amount, 
+                    deposit_currency=deposit_currency,
+                    token_amount=token_amount,
+                    rate=rate.rate)
 
         return self.create_purchase(quote, tx_id, status, metadata)
 
