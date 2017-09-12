@@ -2,9 +2,11 @@ from locust import HttpLocust, TaskSet, task
 import random
 import uuid
 import hashlib
+import gevent
+import time
 
 
-class NewDepositUser(TaskSet):
+class NewDefaultICOUser(TaskSet):
     """
     This Taskset assume you have a company setup with the service activated. 
     It should also allow for unverfied users to make transactions
@@ -16,13 +18,13 @@ class NewDepositUser(TaskSet):
     def __init__(self, parent, *args, **kwargs):
         self.token = ''
         self.company_name = 'load_test_1'
-        super(NewDepositUser, self).__init__(parent)
+        self.ico_id = '69'
+        super(NewDefaultICOUser, self).__init__(parent)
 
     # SIGNUP ONCE OFF FUNCTIONS
     def on_start(self):
         """ on_start is called when a Locust start before any task is scheduled """
         self.signup()
-        self.set_ethereum_address()
 
     def signup(self):
         """
@@ -71,15 +73,18 @@ class NewDepositUser(TaskSet):
         if (random_num == 0):
             currency = "ETH"
         data = {
-            "deposit_amount": "10000",
+            "deposit_amount": random_deposit,
             "deposit_currency": currency
         }
         response = self.client.post(
-            "https://ico.s.services.rehive.io/api/user/icos/69/quotes/",
+            "https://ico.s.services.rehive.io/api/user/icos/" + self.ico_id + "/quotes/",
             headers=self.get_headers(),
             data=data
         )
-        print(response.json())
+        if response.ok:
+            json = response.json()
+            print(json)
+            gevent.spawn(self._async_quote_polling, json['data']['id'])
 
     @task(4)
     def ethereum_index(self):
@@ -99,7 +104,20 @@ class NewDepositUser(TaskSet):
         response = self.client.post(
             "https://bitcoin.s.services.rehive.com/api/1/user/",
             headers=self.get_headers()
-        )      
+        )
+
+    def _async_quote_polling(self, quote_id):
+        # using `with` prevents locust from making an entry in its report
+        url = 'https://ico.s.services.rehive.io/api/user/icos/' + str(self.ico_id) + '/purchases/?quote__id=' + str(quote_id)
+        # Now poll for an ACTIVE status
+        timeout = 10 * 60
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            r = self.client.get(
+                url,
+                headers=self.get_headers()
+            )
+            gevent.sleep(10)  # Poll every 10 seconds
 
     def get_headers(self):
         return {
@@ -108,6 +126,6 @@ class NewDepositUser(TaskSet):
 
 
 class WebsiteUser(HttpLocust):
-    task_set = NewDepositUser
+    task_set = NewDefaultICOUser
     min_wait = 6000
     max_wait = 10000
