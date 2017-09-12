@@ -106,6 +106,13 @@ class NewDefaultICOUser(TaskSet):
             headers=self.get_headers()
         )
 
+    @task(2)
+    def get_transactions(self):
+        response = self.client.get(
+            "transactions/?page=1&page_size=26&orderby=-created",
+            headers=self.get_headers()
+        )
+
     def _async_quote_polling(self, quote_id):
         # using `with` prevents locust from making an entry in its report
         url = 'https://ico.s.services.rehive.io/api/user/icos/' + str(self.ico_id) + '/purchases/?quote__id=' + str(quote_id)
