@@ -456,6 +456,7 @@ class PurchaseManager(models.Manager):
             user=str(quote.user.identifier),
             amount=token_cent_amount,
             currency=quote.phase.ico.currency.code,
+            metadata=metadata,
             confirm_on_create=False)
 
         purchase.token_tx = token_tx['id']
