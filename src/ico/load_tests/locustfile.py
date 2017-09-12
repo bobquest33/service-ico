@@ -18,9 +18,11 @@ class NewDepositUser(TaskSet):
         self.company_name = 'load_test_1'
         super(NewDepositUser, self).__init__(parent)
 
+    # SIGNUP ONCE OFF FUNCTIONS
     def on_start(self):
         """ on_start is called when a Locust start before any task is scheduled """
         self.signup()
+        self.set_ethereum_address()
 
     def signup(self):
         """
@@ -39,14 +41,25 @@ class NewDepositUser(TaskSet):
         json = response.json()
         self.token = json['data']['token']
 
-    @task(1)
+    def set_ethereum_address(self):
+        data = {
+            "address": "1234567",
+        }
+        response = self.client.post(
+            "user/bitcoin-accounts/",
+            headers=self.get_headers(),
+            data=data
+        )
+
+    # TASKS
+    @task(8)
     def index(self):
         """
         Simple basline task to get user from Rehive
         """
         response = self.client.get("user/", headers=self.get_headers())
 
-    @task(2)
+    @task(1)
     def get_ico_quote(self):
         """
         Task for hitting the quote endpoint. Randomly chooses XBT or ETH
@@ -61,7 +74,6 @@ class NewDepositUser(TaskSet):
             "deposit_amount": "10000",
             "deposit_currency": currency
         }
-        # print(data)
         response = self.client.post(
             "https://ico.s.services.rehive.io/api/user/icos/69/quotes/",
             headers=self.get_headers(),
@@ -69,7 +81,7 @@ class NewDepositUser(TaskSet):
         )
         print(response.json())
 
-    @task(3)
+    @task(4)
     def ethereum_index(self):
         """
         Task to get or generate a new public deposit address
@@ -87,7 +99,7 @@ class NewDepositUser(TaskSet):
         response = self.client.post(
             "https://bitcoin.s.services.rehive.com/api/1/user/",
             headers=self.get_headers()
-        )
+        )      
 
     def get_headers(self):
         return {
