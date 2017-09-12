@@ -29,6 +29,7 @@ database:
   volumeName: notification-service-staging-database-volume
   volumeSize: 50Gi
   gcePersistentDiskName: example-database
+  args: 'su postgres -s /bin/sh -c "/usr/lib/postgresql/9.6/bin/postgres -c max_connections=300 -c shared_buffers=3GB -c effective_cache_size=5GB -c work_mem=16MB -c maintenance_work_mem=32MB -c autovacuum_max_workers=5 -c autovacuum_vacuum_scale_factor=0.01 -c log_min_duration_statement=250"'
 workersEnabled: true
 workers:
   - name: worker-receive
