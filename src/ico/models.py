@@ -13,7 +13,7 @@ from rest_framework.exceptions import ValidationError
 from rehive import Rehive
 
 from ico.exceptions import SilentException, PurchaseException
-from ico.enums import PurchaseStatus
+from ico.enums import PurchaseStatus, IcoStatus
 from ico.rates import get_crypto_rates, get_fiat_rates
 from ico.utils.common import (
     to_cents, from_cents
@@ -112,7 +112,7 @@ class Ico(DateModel):
     min_purchase_amount = MoneyField(default=Decimal(0))
     max_purchase_amount = MoneyField(default=Decimal(0))
     max_purchases = models.IntegerField(default=10)
-    enabled = models.BooleanField(default=False)
+    status = EnumField(IcoStatus, max_length=50, default=IcoStatus.HIDDEN)
     public = models.BooleanField(default=False)
     deleted = models.BooleanField(default=False)
 
@@ -124,9 +124,9 @@ class Ico(DateModel):
         if not self.id:
             self.amount_remaining = self.amount
 
-        if self.enabled:
-            Ico.objects.filter(company=self.company, enabled=True).update(
-                enabled=False)
+        if self.status == IcoStatus.OPEN:
+            Ico.objects.filter(company=self.company, 
+                status=IcoStatus.OPEN).update(status=IcoStatus.CLOSED)
 
         return super(Ico, self).save(*args, **kwargs)
 
@@ -349,12 +349,12 @@ class PurchaseManager(models.Manager):
         except Purchase.DoesNotExist:
             pass
 
-        # Check if there is an enabled ICO and the ICO has at least one phase.
+        # Check if there is an open ICO and the ICO has at least one phase.
         # Exclude ICO instances that have the same currency code as the received
         # transaction.
         try:
             ico = Ico.objects.exclude(currency__code=currency['code']).get(
-                company=company, enabled=True)
+                company=company, status=IcoStatus.OPEN)
             phase = ico.get_phase()
         except (Ico.DoesNotExist, Phase.DoesNotExist):
             raise SilentException
@@ -422,7 +422,7 @@ class PurchaseManager(models.Manager):
         status =  data.get('status')
         currency =  data.get('currency')
 
-        # Check if there is a disabled or enabled ICO for purchase completion.
+        # Check if there is an ICO  with any status for purchase completion.
         # Exclude ICO instances that have the same currency code as the received
         # transaction.
         try:

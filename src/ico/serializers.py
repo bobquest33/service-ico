@@ -11,7 +11,7 @@ from django.core.exceptions import ObjectDoesNotExist
 
 from ico.models import *
 from ico.exceptions import SilentException
-from ico.enums import WebhookEvent, PurchaseStatus
+from ico.enums import WebhookEvent, PurchaseStatus, IcoStatus
 from ico.authentication import HeaderAuthentication
 from rehive import Rehive, APIException
 from ico.utils.common import (
@@ -264,13 +264,17 @@ class IcoSerializer(serializers.ModelSerializer, DatesMixin):
     base_goal_amount = serializers.SerializerMethodField()
     min_purchase_amount = serializers.SerializerMethodField()
     max_purchase_amount = serializers.SerializerMethodField()
+    active_phase = serializers.SerializerMethodField()
+    status = serializers.ChoiceField(choices=IcoStatus.choices(), 
+        required=False, source='status.value')
 
     class Meta:
         model = Ico
         fields = ('id', 'currency', 'amount', 'amount_remaining', 
             'base_currency', 'base_goal_amount',
             'min_purchase_amount', 'max_purchase_amount', 'company',
-            'max_purchases', 'enabled', 'public', 'created', 'updated')
+            'max_purchases', 'active_phase', 'status', 'public', 'created', 
+            'updated',)
 
     def get_amount(self, obj):
         return to_cents(obj.amount, obj.currency.divisibility)
@@ -286,6 +290,14 @@ class IcoSerializer(serializers.ModelSerializer, DatesMixin):
 
     def get_max_purchase_amount(self, obj):
         return to_cents(obj.max_purchase_amount, obj.currency.divisibility)
+
+    def get_active_phase(self, obj):
+        try:
+            phase = obj.get_phase()
+            return AdminPhaseSerializer(phase, context=self.context).data
+
+        except Phase.DoesNotExist:
+            return None
 
 
 class AdminCompanySerializer(serializers.ModelSerializer):
@@ -327,7 +339,7 @@ class AdminCreateIcoSerializer(IcoSerializer):
         model = Ico
         fields = ('currency', 'amount', 'exchange_provider', 'base_currency', 
             'base_goal_amount', 'min_purchase_amount', 'max_purchase_amount',
-            'max_purchases', 'enabled', 'public')
+            'max_purchases', 'status', 'public')
 
     def validate_currency(self, currency):
         company = self.context['request'].user.company
@@ -349,6 +361,10 @@ class AdminCreateIcoSerializer(IcoSerializer):
 
     def create(self, validated_data):
         validated_data['company'] = self.context['request'].user.company
+
+        if validated_data.get('status'):
+            validated_data['status'] = IcoStatus(
+                validated_data['status']['value'])
 
         try:
             validated_data['amount'] = from_cents(
@@ -414,15 +430,20 @@ class AdminIcoSerializer(serializers.ModelSerializer, DatesMixin):
     base_goal_amount = serializers.SerializerMethodField()
     min_purchase_amount = serializers.SerializerMethodField()
     max_purchase_amount = serializers.SerializerMethodField()
+    active_phase = serializers.SerializerMethodField()
+    status = serializers.ChoiceField(choices=IcoStatus.choices(), 
+        required=False, source='status.value')
 
     class Meta:
         model = Ico
         fields = ('id', 'currency', 'amount', 'amount_remaining', 
             'exchange_provider', 'base_currency', 'base_goal_amount',
             'min_purchase_amount', 'max_purchase_amount',
-            'max_purchases', 'enabled', 'public', 'created', 'updated')
+            'max_purchases', 'active_phase', 'status', 'public', 'created', 
+            'updated')
         read_only_fields = ('id', 'currency', 'amount', 'amount_remaining', 
-            'base_currency', 'base_goal_amount', 'created', 'updated')
+            'base_currency', 'base_goal_amount', 'active_phase', 'created', 
+            'updated')
 
     def get_amount(self, obj):
         return to_cents(obj.amount, obj.currency.divisibility)
@@ -439,6 +460,14 @@ class AdminIcoSerializer(serializers.ModelSerializer, DatesMixin):
     def get_max_purchase_amount(self, obj):
         return to_cents(obj.max_purchase_amount, obj.currency.divisibility)
 
+    def get_active_phase(self, obj):
+        try:
+            phase = obj.get_phase()
+            return AdminPhaseSerializer(phase, context=self.context).data
+
+        except Phase.DoesNotExist:
+            return None
+
     def delete(self):
         instance = self.instance
         instance.deleted = True
@@ -450,6 +479,10 @@ class AdminUpdateIcoSerializer(AdminIcoSerializer):
     max_purchase_amount = serializers.IntegerField()
 
     def update(self, instance, validated_data):
+        if validated_data.get('status'):
+            validated_data['status'] = IcoStatus(
+                validated_data['status']['value'])
+        
         if validated_data.get('min_purchase_amount'):
             try:
                 validated_data['min_purchase_amount'] = from_cents(
@@ -611,7 +644,8 @@ class UserIcoSerializer(IcoSerializer):
         fields = ('id', 'currency', 'amount', 'amount_remaining', 
             'base_currency', 'base_goal_amount',
             'min_purchase_amount', 'max_purchase_amount',
-            'max_purchases', 'enabled', 'public', 'created', 'updated')
+            'max_purchases', 'active_phase', 'status', 'public', 'created', 
+            'updated',)
 
 
 class UserRateSerializer(serializers.ModelSerializer, DatesMixin):
@@ -664,11 +698,11 @@ class UserCreateQuoteSerializer(serializers.ModelSerializer):
 
         # Find a live ICO.
         try:
-            ico = Ico.objects.get(company=user.company, id=ico_id, enabled=True)
+            ico = Ico.objects.get(company=user.company, id=ico_id)
 
-            if not ico.enabled:
+            if ico.status != IcoStatus.OPEN:
                 raise serializers.ValidationError(
-                    {"non_field_errors": ["The ICO is disabled."]})                
+                    {"non_field_errors": ["The ICO is closed."]})                
 
         except Ico.DoesNotExist:
             raise exceptions.NotFound()

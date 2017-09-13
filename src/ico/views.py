@@ -12,6 +12,7 @@ from rest_framework.pagination import PageNumberPagination
 from ico.models import *
 from ico.serializers import *
 from ico.authentication import *
+from ico.enums import IcoStatus
 
 from logging import getLogger
 
@@ -155,10 +156,10 @@ class IcoList(ListAPIView):
     pagination_class = ResultsSetPagination
     serializer_class = IcoSerializer
     filter_backends = (filters.DjangoFilterBackend,)
-    filter_fields = ('id', 'enabled', 'company__identifier', 'currency__code',)
+    filter_fields = ('id', 'status', 'company__identifier', 'currency__code',)
 
     def get_queryset(self):
-        return Ico.objects.filter(public=True)
+        return Ico.objects.exclude(status=IcoStatus.HIDDEN).filter(public=True)
 
 
 class IcoView(GenericAPIView):
@@ -174,7 +175,8 @@ class IcoView(GenericAPIView):
         ico_id = kwargs['ico_id']
 
         try:
-            ico = Ico.objects.get(public=True, id=ico_id)
+            ico = Ico.objects.exclude(status=IcoStatus.HIDDEN).get(
+                public=True, id=ico_id)
         except Ico.DoesNotExist:
             raise exceptions.NotFound()
 
@@ -293,7 +295,7 @@ class AdminIcoList(ListAPIView):
     serializer_class = AdminIcoSerializer
     authentication_classes = (AdminAuthentication,)
     filter_backends = (filters.DjangoFilterBackend,)
-    filter_fields = ('id', 'enabled', 'currency__code',)
+    filter_fields = ('id', 'status', 'currency__code',)
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -605,11 +607,12 @@ class UserIcoList(ListAPIView):
     serializer_class = UserIcoSerializer
     authentication_classes = (UserAuthentication,)
     filter_backends = (filters.DjangoFilterBackend,)
-    filter_fields = ('id', 'enabled', 'currency__code',)
+    filter_fields = ('id', 'status', 'currency__code',)
 
     def get_queryset(self):
         company = self.request.user.company
-        return Ico.objects.filter(company=company)
+        return Ico.objects.exclude(status=IcoStatus.HIDDEN).filter(
+            company=company)
 
 
 class UserIcoView(GenericAPIView):
@@ -626,7 +629,8 @@ class UserIcoView(GenericAPIView):
         ico_id = kwargs['ico_id']
 
         try:
-            ico = Ico.objects.get(company=company, id=ico_id)
+            ico = Ico.objects.exclude(status=IcoStatus.HIDDEN).get(
+                company=company, id=ico_id)
         except Ico.DoesNotExist:
             raise exceptions.NotFound()
 
@@ -651,7 +655,8 @@ class UserRateList(ListAPIView):
         ico_id = self.kwargs['ico_id']
 
         try:
-            ico = Ico.objects.get(id=ico_id, company=company)
+            ico = Ico.objects.exclude(status=IcoStatus.HIDDEN).get(
+                id=ico_id, company=company)
             phase = ico.get_phase()
         except (Ico.DoesNotExist, Phase.DoesNotExist):
             raise exceptions.NotFound()
@@ -674,7 +679,8 @@ class UserRateView(GenericAPIView):
         rate_id = kwargs['rate_id']
 
         try:
-            ico = Ico.objects.get(id=ico_id, company=company)
+            ico = Ico.objects.exclude(status=IcoStatus.HIDDEN).get(
+                id=ico_id, company=company)
             phase = ico.get_phase()
         except (Ico.DoesNotExist, Phase.DoesNotExist):
             raise exceptions.NotFound()
@@ -710,7 +716,8 @@ class UserQuoteList(ListAPIView):
         ico_id = self.kwargs['ico_id']
 
         try:
-            ico = Ico.objects.get(company=user.company, id=ico_id)
+            ico = Ico.objects.exclude(status=IcoStatus.HIDDEN).get(
+                company=user.company, id=ico_id)
         except Ico.DoesNotExist:
             raise exceptions.NotFound()
 
@@ -768,7 +775,8 @@ class UserPurchaseList(ListAPIView):
         ico_id = self.kwargs['ico_id']
 
         try:
-            ico = Ico.objects.get(company=user.company, id=ico_id)
+            ico = Ico.objects.exclude(status=IcoStatus.HIDDEN).get(
+                company=user.company, id=ico_id)
         except Ico.DoesNotExist:
             raise exceptions.NotFound()
 

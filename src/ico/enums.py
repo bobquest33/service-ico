@@ -19,3 +19,9 @@ class PurchaseStatus(Enum):
     COMPLETE = 'Complete'
     FAILED = 'Failed'
     DELETED = 'Deleted'
+
+
+class IcoStatus(Enum):
+    OPEN = 'open'
+    CLOSED = 'closed'
+    HIDDEN = 'hidden'
