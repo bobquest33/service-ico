@@ -196,9 +196,24 @@ class Rate(DateModel):
 
     objects = RateManager()
 
+    def __init__(self, *args, **kwargs):
+        super(Rate, self).__init__(*args, **kwargs)
+        self._currency_code = self.currency.code
+        self._ico_base_currency_code = self.phase.ico.base_currency.code
+        self._convert_xbt_currency_code()
+
+    def _convert_xbt_currency_code(self):
+        """
+        Convert the Bitcoin currency code from XBT to BTC.
+        The exchange uses BTC instead of the proper XBT code.
+        """
+        if self._currency_code == 'XBT':
+            self._currency_code = 'BTC'
+
+        if self._ico_base_currency_code == 'XBT':
+            self._ico_base_currency_code = 'BTC'
+
     def _calculate_crypto_rate(self):
-        currency_code = self.currency.code
-        ico_base_currency_code = self.phase.ico.base_currency.code
 
         # Get the updated rates from the exchange or caches
         crypto_rates = get_crypto_rates()
@@ -207,8 +222,8 @@ class Rate(DateModel):
         # currency pairs (symbols), in which case we would need to
         # check them both ways because they are only listed
         # in one "direction"
-        symbol = currency_code + ico_base_currency_code
-        reverse_symbol = ico_base_currency_code + currency_code
+        symbol = self._currency_code + self._ico_base_currency_code
+        reverse_symbol = self._ico_base_currency_code + self._currency_code
         check_reverse = False
 
         try:
@@ -260,16 +275,10 @@ class Rate(DateModel):
 
         # Get the updated rates from the exchange or caches
         fiat_rates = get_fiat_rates()
-        currency_code = self.currency.code
-        ico_base_currency_code = self.phase.ico.base_currency.code
-
-        # The exchange lists bitcoin as BTC not XBT
-        if self.currency.code == 'XBT':
-            currency_code = 'BTC'
 
         try:
-            base_rate = Decimal(fiat_rates[ico_base_currency_code]['rate'])
-            exchange_rate = Decimal(fiat_rates[currency_code]['rate'])
+            base_rate = Decimal(fiat_rates[self._ico_base_currency_code]['rate'])
+            exchange_rate = Decimal(fiat_rates[self._currency_code]['rate'])
         except KeyError as exc:
             return self._calculate_crypto_rate()
         else:
@@ -293,7 +302,7 @@ class Quote(DateModel):
     deposit_amount = MoneyField(default=Decimal(0))
     deposit_currency = models.ForeignKey('ico.Currency')
     token_amount = MoneyField(default=Decimal(0))
-    rate = MoneyField(default=Decimal(0)) # Rate of conversion between deposit currency and 1 token at time of quote.
+    rate = MoneyField(default=Decimal(0))  # Rate of conversion between deposit currency and 1 token at time of quote.
 
     def save(self, *args, **kwargs):
         # Delete all previous quotes for the same currency and phase.
