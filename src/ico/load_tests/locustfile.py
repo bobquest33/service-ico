@@ -4,6 +4,7 @@ import uuid
 import hashlib
 import gevent
 import time
+import os
 
 
 class NewDefaultICOUser(TaskSet):
@@ -17,8 +18,8 @@ class NewDefaultICOUser(TaskSet):
 
     def __init__(self, parent, *args, **kwargs):
         self.token = ''
-        self.company_name = 'load_test_1'
-        self.ico_id = '69'
+        self.company_name = os.environ.get("ICO_COMPANY_ID")
+        self.ico_id = os.environ.get("ICO_ID")
         super(NewDefaultICOUser, self).__init__(parent)
 
     # SIGNUP ONCE OFF FUNCTIONS
