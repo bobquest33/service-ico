@@ -9,6 +9,8 @@ from fabric.context_managers import hide
 from fabric.contrib.project import rsync_project
 import posixpath
 
+from .utils import get_config
+
 
 def set_env(config, version_tag=None):
     """
@@ -31,31 +33,6 @@ def set_env(config, version_tag=None):
     env.local_path = os.path.dirname(__file__)
 
 
-def format_yaml(template, config):
-    """Replace in ${ENV_VAR} in template with value"""
-    formatted = template
-    for k, v in config.items():
-        formatted = formatted.replace('${%s}' % k, v)
-    return formatted
-
-
-def get_config(config):
-    """Import config file as dictionary"""
-    if config[-5:] != '.yaml':
-        config += '.yaml'
-
-    # Use /server as base path
-    dir_path = os.path.dirname(os.path.realpath(__file__))
-    server_dir_path = dir_path
-    if not os.path.isabs(config):
-        config = os.path.join(server_dir_path, config)
-
-    with open(config, 'r') as stream:
-        config_dict = yaml.load(stream)
-
-    return config_dict
-
-
 def upload():
     """Upload entire project to server"""
     # Bug: when setting this inside a function. Using host_string as workaround
@@ -68,9 +45,8 @@ def upload():
             '.env.example', 'README.md', 'var'
         ), delete=True)
 
+
 # Wrapper Functions:
-
-
 def docker(cmd='--help'):
     """
     Wrapper for docker
@@ -85,6 +61,7 @@ def compose(cmd='--help', path=''):
     """
     with cd(path):
         run('docker-compose {cmd}'.format(cmd=cmd))
+
 
 # App Image Builder:
 def gcloud_login():
@@ -109,9 +86,9 @@ def push():
     Build, tag and push docker image
     """
     image = '{}:{}'.format(env.image_name, env.version_tag)
-    build()
     with cd(env.project_dir):
         run('gcloud docker -- push %s' % image)
+
 
 # Base Image Builder:
 # No longer needed for Alpine build

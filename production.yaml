@@ -2,7 +2,6 @@ PROJECT_NAME: ico-service
 NAMESPACE: ico-service
 IMAGE: gcr.io/rehive-services/ico-service
 HOST_NAME: rehive-build-server # not required for k8s-only setup
-BASE_IMAGE: gcr.io/rehive-services/ico-service-base
 VIRTUAL_HOST: ico.services.rehive.io
 VENV_PYTHON: ~/.conda/envs/ico-service/bin/python
 ENV_FILE: .production.env

@@ -441,7 +441,8 @@ class AdminIcoSerializer(serializers.ModelSerializer, DatesMixin):
 
     def delete(self):
         instance = self.instance
-        instance.delete()
+        instance.deleted = True
+        instance.save()
 
 
 class AdminUpdateIcoSerializer(AdminIcoSerializer):
@@ -495,7 +496,8 @@ class AdminPhaseSerializer(serializers.ModelSerializer):
 
     def delete(self):
         instance = self.instance
-        instance.delete()
+        instance.deleted = True
+        instance.save()
 
 
 class AdminCreatePhaseSerializer(serializers.ModelSerializer):
@@ -521,7 +523,7 @@ class AdminCreatePhaseSerializer(serializers.ModelSerializer):
                 >= 100):
             raise serializers.ValidationError(
                 {"non_field_errors": 
-                    ["Cannoy have a higher total phase percentage than 100."]})
+                    ["Cannot have a higher total phase percentage than 100."]})
 
         validated_data['ico'] = ico
 

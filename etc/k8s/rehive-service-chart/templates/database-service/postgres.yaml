@@ -1,0 +1,88 @@
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: {{ .Values.database.volumeName }}
+  labels:
+    release: {{ template "fullname" . }}
+spec:
+  capacity:
+    storage: {{ .Values.database.volumeSize }}
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Recycle
+  gcePersistentDisk:
+    fsType: "ext4"
+    pdName: {{ .Values.database.gcePersistentDiskName }}
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: data-claim-1
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.database.volumeSize }}
+  storageClassName: ""
+  selector:
+    matchLabels:
+      release: {{ template "fullname" . }}
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: database-postgres
+  labels:
+    name: database
+    node: postgres
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres
+          ports:
+            - containerPort: 5432
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          command: ['/bin/sh']
+          args: ['-c', {{ .Values.database.args }}]
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: pg-data-volume
+      volumes:
+        - name: pg-data-volume
+          persistentVolumeClaim:
+            claimName: data-claim-1
+      tolerations:
+        - key: "dedicated"
+          operator: "Equal"
+          value: "postgres"
+          effect: "NoSchedule"
+      nodeSelector:
+        cloud.google.com/gke-nodepool: postgres-pool
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: database-postgres-service
+  labels:
+    name: database
+    node: postgres
+spec:
+  type: NodePort
+  ports:
+    - port: 5432
+      targetPort: 5432
+      protocol: TCP
+      name: nginx
+  selector:
+    app: postgres
