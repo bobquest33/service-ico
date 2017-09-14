@@ -33,12 +33,12 @@ spec:
             path: /readiness
             port: {{ .Values.service.internalPort }}
           initialDelaySeconds: 10
-          timeoutSeconds: 2
+          timeoutSeconds: 60
           periodSeconds: 10
         readinessProbe:
           httpGet:
             path: /healthz
             port: {{ .Values.service.internalPort }}
           initialDelaySeconds: 10
-          timeoutSeconds: 2
+          timeoutSeconds: 60
           periodSeconds: 10
