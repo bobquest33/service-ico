@@ -50,6 +50,7 @@ def manage(ctx, cmd):
     # Switched to run via fabric as invoke was not displaying stdout correctly
     ctx.run('{python} src/manage.py {cmd}'.format(python=venv_python, cmd=cmd), pty=True)
 
+
 @task
 def build(ctx, config, version_tag):
     """
@@ -111,6 +112,17 @@ def docker_release(ctx, config):
     print('Release Info:\n'
           'Tag: {}\n'
           'Image: {}\n'.format(tag, image_name))
+
+
+@task
+def run_load_test(ctx, host, ico_company_id, ico_id):
+    """
+    Wrapper for the locust load test
+    """
+    ctx.run(
+        "ICO_ID=%s ICO_COMPANY_ID=%s locust -f ./src/ico/load_tests/locustfile.py --host=%s" % (ico_id, ico_company_id, host),
+        echo=True
+        )
 
 
 def confirm(prompt='Continue?\n', failure_prompt='User cancelled task'):

@@ -9,11 +9,13 @@ import os
 
 class NewDefaultICOUser(TaskSet):
     """
-    This Taskset assume you have a company setup with the service activated. 
+    This Taskset assume you have a company setup with the service activated.
     It should also allow for unverfied users to make transactions
-    Company name: load_test_1
+
+    Locust version: pip install locustio==0.8a2
 
     To run: locust -f /relative/path/to/file/locustfile.py --host=REHIVE_API_URL
+    Using invoke: inv.run-load-test HOST COMPANY_ID ICO_ID
     """
 
     def __init__(self, parent, *args, **kwargs):
