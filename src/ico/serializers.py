@@ -545,15 +545,17 @@ class AdminCreatePhaseSerializer(serializers.ModelSerializer):
     def validate(self, validated_data):
         company = self.context['request'].user.company
         ico_id = self.context.get('view').kwargs.get('ico_id')
+        percentage = validated_data.get('percentage')
 
         try:
             ico = Ico.objects.get(company=company, id=ico_id)
         except Ico.DoesNotExist:
             raise exceptions.NotFound()
 
-        if (Phase.objects.filter(ico=ico).aggregate(
-                total=Coalesce(models.Sum('percentage'), 0))['total'] 
-                >= 100):
+        existing_percentage = Phase.objects.filter(ico=ico).aggregate(
+            total=Coalesce(models.Sum('percentage'), 0))['total'] 
+
+        if ((existing_percentage + percentage) > 100):
             raise serializers.ValidationError(
                 {"non_field_errors": 
                     ["Cannot have a higher total phase percentage than 100."]})
