@@ -9,3 +9,7 @@ ENV_FILE: .staging.env
 GCLOUD_STATIC_BUCKET: ico-service-static
 CLUSTER: staging
 CLUSTER_PROJECT: rehive-services
+SERVICE_API: https://ico.s.services.rehive.io/api/
+REHIVE_STAGING_API: https://staging.rehive.com/api/3/
+ETHEREUM_SERVICE_API: https://ethereum.s.services.rehive.io/api/1/
+BITCOIN_SERVICE_API: https://bitcoin.s.services.rehive.com/api/1/

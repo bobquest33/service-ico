@@ -115,12 +115,22 @@ def docker_release(ctx, config):
 
 
 @task
-def run_load_test(ctx, host, ico_company_id, ico_id):
+def run_load_test(ctx, config, ico_company_id, ico_id):
     """
     Wrapper for the locust load test
     """
+    config_dict = get_config(config)
     ctx.run(
-        "ICO_ID=%s ICO_COMPANY_ID=%s locust -f ./src/ico/load_tests/locustfile.py --host=%s" % (ico_id, ico_company_id, host),
+        'ICO_ID={0} ICO_COMPANY_ID={1} '
+        'SERVICE_API={2} '
+        'ETHEREUM_SERVICE_API={3} '
+        'BITCOIN_SERVICE_API={4} '
+        'locust -f ./src/ico/load_tests/locustfile.py --host={5}'.format(
+            ico_id, ico_company_id,
+            config_dict['SERVICE_API'],
+            config_dict['ETHEREUM_SERVICE_API'],
+            config_dict['BITCOIN_SERVICE_API'],
+            config_dict['REHIVE_STAGING_API']),
         echo=True
         )
 

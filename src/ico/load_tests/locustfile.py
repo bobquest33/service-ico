@@ -22,6 +22,9 @@ class NewDefaultICOUser(TaskSet):
         self.token = ''
         self.company_name = os.environ.get("ICO_COMPANY_ID")
         self.ico_id = os.environ.get("ICO_ID")
+        self.ethereum_service_url = os.environ.get("ETHEREUM_SERVICE_API")
+        self.bitcoin_service_url = os.environ.get("BITCOIN_SERVICE_API")
+        self.ico_service_url = os.environ.get("SERVICE_API")
         super(NewDefaultICOUser, self).__init__(parent)
 
     # SIGNUP ONCE OFF FUNCTIONS
@@ -80,7 +83,7 @@ class NewDefaultICOUser(TaskSet):
             "deposit_currency": currency
         }
         response = self.client.post(
-            "https://ico.s.services.rehive.io/api/user/icos/" + self.ico_id + "/quotes/",
+            self.ico_service_url + "user/icos/" + self.ico_id + "/quotes/",
             headers=self.get_headers(),
             data=data
         )
@@ -95,7 +98,7 @@ class NewDefaultICOUser(TaskSet):
         Task to get or generate a new public deposit address
         """
         response = self.client.get(
-            "https://ethereum.s.services.rehive.io/api/1/user/",
+            self.ethereum_service_url + "user/",
             headers=self.get_headers()
         )
 
@@ -105,7 +108,7 @@ class NewDefaultICOUser(TaskSet):
         Task to get or generate a new public deposit address
         """
         response = self.client.post(
-            "https://bitcoin.s.services.rehive.com/api/1/user/",
+            self.bitcoin_service_url + "user/",
             headers=self.get_headers()
         )
 
@@ -118,7 +121,7 @@ class NewDefaultICOUser(TaskSet):
 
     def _async_quote_polling(self, quote_id):
         # using `with` prevents locust from making an entry in its report
-        url = 'https://ico.s.services.rehive.io/api/user/icos/' + str(self.ico_id) + '/purchases/?quote__id=' + str(quote_id)
+        url = self.ico_service_url + 'user/icos/' + str(self.ico_id) + '/purchases/?quote__id=' + str(quote_id)
         # Now poll for an ACTIVE status
         timeout = 10 * 60
         end_time = time.time() + timeout
