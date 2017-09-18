@@ -67,17 +67,14 @@ class NewDefaultICOUser(TaskSet):
         """
         response = self.client.get("user/", headers=self.get_headers())
 
-    @task(1)
+    @task(4)
     def get_ico_quote(self):
         """
         Task for hitting the quote endpoint. Randomly chooses XBT or ETH
         The deposit amount should be fine for either
         """
-        random_num = random.randint(0, 1)
         random_deposit = random.randint(10000, 1000000)
-        currency = "XBT"
-        if (random_num == 0):
-            currency = "ETH"
+        currency = "XBT" if random.randint(0, 1) else "ETH"
         data = {
             "deposit_amount": random_deposit,
             "deposit_currency": currency
@@ -120,7 +117,6 @@ class NewDefaultICOUser(TaskSet):
         )
 
     def _async_quote_polling(self, quote_id):
-        # using `with` prevents locust from making an entry in its report
         url = self.ico_service_url + 'user/icos/' + str(self.ico_id) + '/purchases/?quote__id=' + str(quote_id)
         # Now poll for an ACTIVE status
         timeout = 10 * 60
