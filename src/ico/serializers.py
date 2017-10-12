@@ -56,7 +56,7 @@ class ActivateSerializer(serializers.Serializer):
 
         try:
             user = rehive.user.get()
-            if user['permission_group'] != "admin":
+            if "admin" not in [p['name']for p in user['permission_groups']]:
                 raise serializers.ValidationError(
                     {"token": ["Invalid admin user."]})
         except APIException:
@@ -121,7 +121,7 @@ class DeactivateSerializer(serializers.Serializer):
 
         try:
             user = rehive.user.get()
-            if user['permission_group'] != "admin":
+            if "admin" not in [p['name']for p in user['permission_groups']]:
                 raise serializers.ValidationError(
                     {"token": ["Invalid admin user."]})
         except APIException:

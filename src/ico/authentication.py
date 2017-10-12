@@ -46,7 +46,7 @@ class AdminAuthentication(HeaderAuthentication):
 
         try:
             user = rehive.user.get()
-            if  "admin" not in [p['name']for p in user['permission_groups']]:
+            if "admin" not in [p['name']for p in user['permission_groups']]:
                 raise exceptions.AuthenticationFailed(_('Invalid admin user'))          
         except APIException:
             raise exceptions.AuthenticationFailed(_('Invalid user'))
